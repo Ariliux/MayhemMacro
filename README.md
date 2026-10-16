@@ -177,6 +177,11 @@ Then double-click `run_mayhem.pyw`. The tests run with
 Roblox or send anything. A few read real Roblox logs and screenshots in `tests/fixtures`,
 which aren't in the repo, so those skip. `DESIGN.md` explains how it works inside.
 
+## My other macros
+
+- **[GlassMacro](https://github.com/Ariliux/GlassMacro)**: an AFK macro for **Roblox Rivals**
+  that farms Free For All playtime for the Glass wrap.
+
 ## License
 
 [MIT](LICENSE). Do what you want with it, just keep the license file.
