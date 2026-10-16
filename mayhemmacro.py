@@ -100,26 +100,21 @@ CUBE_FACES = (((10, 1, 18.5, 5.75, 10, 10.5, 1.5, 5.75), ACCENT_SOFT),
 
 def draw_cube(canvas: tk.Canvas, x: float, y: float, size: float,
               dim: bool = False) -> None:
-    """The block from the icon, in three polygons (a 20x20 design)."""
-    k = size / 20.0
-    for pts, colour in CUBE_FACES:
-        if dim:
-            colour = blend(colour, PANEL, 0.55)
-        canvas.create_polygon([x + p * k if i % 2 == 0 else y + p * k
-                               for i, p in enumerate(pts)],
-                              fill=colour, outline="")
+    """The app icon (mayhem/icon.py) on a canvas. dim fades it into the panel,
+    for the empty pages."""
+    img = cube_image(max(8, int(round(size))))
+    if dim:
+        img.putalpha(img.getchannel("A").point(lambda v: int(v * 0.45)))
+    photo = ImageTk.PhotoImage(img, master=canvas)
+    canvas._mayhem_icons = getattr(canvas, "_mayhem_icons", []) + [photo]   # keep it alive
+    canvas.create_image(x, y, image=photo, anchor="nw")
 
 
 def cube_image(size: int, ss: int = 4) -> Image.Image:
-    """The same block as a smooth RGBA picture (the window icon). Drawn at
-    4x and scaled down, because PIL polygons have no anti-aliasing either."""
-    big = size * ss
-    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    k = big / 20.0
-    for pts, colour in CUBE_FACES:
-        d.polygon([p * k for p in pts], fill=colour)
-    return img.resize((size, size), Image.LANCZOS)
+    """The app icon as an RGBA picture (window icon, logo). Tiny sizes use the
+    simpler version so they stay crisp."""
+    from mayhem.icon import render
+    return render(size, detail=size >= 40)
 
 
 # Stats chart: soft round capsules, lighter at the top. Tk's canvas has no
