@@ -115,3 +115,11 @@ def test_fixes_from_the_first_long_run():
     assert hud._split_variant("Inverte#vergreen") == ("Evergreen", "inverted")
     f = hud.parse_pickup("Void King just picked up a Inverte#vergreen block!")
     assert (f.block, f.variant, f.denominator) == ("Evergreen", "inverted", 1_000_000)
+
+
+def test_diamond_misreads_snap_to_its_real_odds():
+    """2026-10-16: Diamond (1 in 100,000) alerted as 1 in 5,100,000 and 109,900."""
+    for misread in (5_100_000, 109_900, 10_000, 1_000):
+        assert blocks.snap("Diamond", "normal", misread) == ("normal", 100_000), misread
+    assert blocks.snap("Diamond", "normal", 1_000_000) == ("inverted", 1_000_000)
+    assert blocks.fix_name("Plamond") == "Diamond"

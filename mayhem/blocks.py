@@ -43,7 +43,7 @@ _TABLE: tuple[tuple[str, int], ...] = (
     # Arctic (no wiki page yet; read in game)
     ("Lucid", 250_000), ("Snowstorm", 100_000),
     # read in game, world not known yet
-    ("Diamond", 109_900),
+    ("Diamond", 100_000),
     # anywhere
     ("Rare", 200),
 )
