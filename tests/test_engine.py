@@ -978,7 +978,7 @@ RESONANCE = "Resonance has spawned! (1 / 100,000)"
 
 
 def test_banner_becomes_a_rare_event_with_a_picture():
-    r = Rig().start()
+    r = Rig(save_pictures=True).start()
     r.ocr.script["banner"] = [RESONANCE]
     r.tick()
     [ev] = r.of("rare")
@@ -1837,7 +1837,7 @@ def test_anti_afk_variety_mixes_jumps_double_jumps_and_clicks():
 
 
 def test_pictures_only_for_rares_at_your_setting_and_problems():
-    r = Rig(rare_min=1_000_000).start()
+    r = Rig(rare_min=1_000_000, save_pictures=True).start()
     r.ocr.script["banner"] = ["Inverted Relic has spawned! (1 / 6,000,000)"]
     r.tick()
     r.ocr.script["banner"] = ["Chromatic Opal has spawned! (1 / 250,000)"]   # alerts (variant) but under 1M
@@ -1877,3 +1877,10 @@ def test_only_clean_unknown_banners_are_logged(text, logged):
     r.ocr.script["banner"] = [text]
     r.tick()
     assert any(text[:20] in t for t in r.logs("info")) is logged
+
+
+def test_no_pictures_are_saved_unless_switched_on():
+    r = Rig(rare_min=100_000).start()
+    r.ocr.script["banner"] = ["Inverted Relic has spawned! (1 / 6,000,000)"]
+    r.run(5)
+    assert r.of("rare") and r.pictures == []                 # alerted, nothing saved to files

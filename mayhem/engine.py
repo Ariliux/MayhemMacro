@@ -1193,7 +1193,8 @@ class Engine:
             self._log("warn", "Couldn't click the vote this time.")
 
     def _picture(self, img: Image.Image, tag: str) -> None:
-        if self.deps.save_picture is None:
+        """Save a picture to the data folder, only with 'Save pictures' on."""
+        if self.deps.save_picture is None or not _flag(self._settings(), "save_pictures"):
             return
         try:
             self.deps.save_picture(img, tag)

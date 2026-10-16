@@ -4558,6 +4558,12 @@ class MayhemMacro(ctk.CTk):
             "Moves your mouse to the exact middle of the screen.",
             on=s.get("center_cursor", True) is True,
             command=lambda: self._flag_switched("center_cursor", self.sw_center))
+        self.sw_pics = self._switch_row(
+            card, "Save pictures",
+            "Saves a picture of rare blocks at your rarity and of problems to the data "
+            "folder (to help fix bugs). Off: nothing is saved to your files.",
+            on=s.get("save_pictures") is True,
+            command=lambda: self._flag_switched("save_pictures", self.sw_pics))
         self.sw_sjump = self._switch_row(
             card, "Jump at the start",
             "One jump right after the setup above.",

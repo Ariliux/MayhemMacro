@@ -172,7 +172,8 @@ nothing you download ever should.
   - Updates only ever come from this repo's releases, and it only installs one if the
     file's fingerprint (its SHA-256) matches the one GitHub lists for it. If anything
     doesn't match, it throws the download away and changes nothing.
-  - The pictures it saves (vote screens, rare blocks) stay in your data folder.
+  - It saves no pictures to your PC unless you turn on **Save pictures** in Settings (off
+    at first). Then only rare blocks at your rarity and problems, in your data folder.
 
 ## Found a bug?
 

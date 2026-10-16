@@ -116,6 +116,7 @@ EXPECTED_DEFAULTS = {
     "center_cursor": True,
     "start_jump": True,
     "attach_picture": False,
+    "save_pictures": False,
     "medal_clip": False,
     "medal_key": "F4",
     "keep_awake": True,

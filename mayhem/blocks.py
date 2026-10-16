@@ -42,6 +42,8 @@ _TABLE: tuple[tuple[str, int], ...] = (
     ("Thing", 100_000_000), ("TROLL", 66_666_666),
     # Arctic (no wiki page yet; read in game)
     ("Lucid", 250_000), ("Snowstorm", 100_000),
+    # read in game, world not known yet
+    ("Diamond", 109_900),
     # anywhere
     ("Rare", 200),
 )
@@ -90,7 +92,16 @@ def fix_name(raw: str) -> str:
     if k in keys:
         return keys[k]
     best = difflib.get_close_matches(k, list(keys), n=1, cutoff=0.75)
-    return keys[best[0]] if best else raw
+    if best:
+        return keys[best[0]]
+    # The first letter or two is what OCR gets wrong most ('Plamond' for
+    # Diamond): compare the rest of the name too.
+    if len(k) >= 6:
+        rest = {key[1:]: key for key in keys if len(key) >= 6}
+        best = difflib.get_close_matches(k[1:], list(rest), n=1, cutoff=0.82)
+        if best:
+            return keys[rest[best[0]]]
+    return raw
 
 
 def is_known(name: str) -> bool:
