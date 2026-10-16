@@ -44,9 +44,17 @@ DEFAULT_SETTINGS: dict = {
                 "send": {"rare": True, "run": True, "rejoin": True, "storage": True,
                          "error": True, "stuck": True, "hourly": False},
                 "mention": {"rare": True, "error": True, "stuck": True}},
-    "check_updates": False,
+    "check_updates": True,
     "ui": {"geometry": "", "page": "home", "sidebar_collapsed": False, "pin": False},
+    "settings_version": 2,
 }
+
+# 1.0.0 saved "check_updates": false with every settings file, but it had no
+# update checks and no switch for them: that false was only the old default.
+# A file without settings_version is from 1.0.0, so its check_updates is
+# dropped once and the new default applies. From version 2 on, whatever is
+# saved is the user's own choice and is kept.
+SETTINGS_VERSION = 2
 
 SAVE_TRIES = 3          # os.replace can fail for a moment while antivirus or
 RETRY_WAIT = 0.1        # a backup tool has the old file open
@@ -224,7 +232,15 @@ def load_settings(path: str | None = None) -> dict:
     if not isinstance(data, dict):
         _set_aside(path)
         return _fix_lists(copy.deepcopy(DEFAULT_SETTINGS))
-    return _fix_lists(_merge(DEFAULT_SETTINGS, data))
+    return _fix_lists(_merge(DEFAULT_SETTINGS, _migrate(data)))
+
+
+def _migrate(data: dict) -> dict:
+    """An older settings file brought up to date (see SETTINGS_VERSION)."""
+    if "settings_version" not in data:
+        data = {k: v for k, v in data.items() if k != "check_updates"}
+        data["settings_version"] = SETTINGS_VERSION
+    return data
 
 
 def save_settings(d: dict, path: str | None = None) -> bool:

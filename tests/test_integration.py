@@ -471,6 +471,9 @@ SIDE_EFFECTS = {
     "mayhem/window.py": {"SetForegroundWindow", "keybd_event", "ShowWindow",
                          "BringWindowToTop", "AttachThreadInput"},
     "mayhem/discord.py": {"urlopen"},
+    # the request to GitHub, starting the new version, reopening the app and
+    # swapping its files (copytree into .new, the renames that switch over)
+    "mayhem/update.py": {"urlopen", "popen", "startfile", "copytree", "rename"},
     "mayhem/engine.py": {"startfile", "SendInput", "TerminateProcess", "urlopen"},
     "mayhemmacro.py": {"startfile", "SetForegroundWindow", "ShowWindow",
                        "SetThreadExecutionState", "add_hotkey"},
@@ -537,6 +540,32 @@ def test_every_real_side_effect_comes_after_a_guard(rel):
     assert risky, f"no side-effect call found in {rel}: the scan is broken"
     for name in sorted(risky):
         assert _safe(name, targets, funcs), f"{rel}: {name}() acts before a guard"
+
+
+def test_only_discord_and_update_ever_reach_the_network():
+    """Two ways out, both opt-out-able and both guarded: your own Discord
+    webhook (mayhem/discord.py) and the update check (mayhem/update.py).
+    Only update.py knows GitHub's API, and nothing else imports a network
+    module (rejoin.py's urllib.parse only takes links apart)."""
+    net = {"mayhem/discord.py", "mayhem/update.py"}
+    net_modules = {"urllib.request", "http.client", "socket", "ssl", "requests"}
+    seen = set()
+    for rel in APP_FILES:
+        name = rel.replace(os.sep, "/")
+        text = _read(os.path.join(ROOT, rel))
+        imported = set()
+        for node in ast.walk(ast.parse(text)):
+            if isinstance(node, ast.Import):
+                imported |= {a.name for a in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                imported |= {node.module} | {f"{node.module}.{a.name}" for a in node.names}
+        if "urlopen" in text:
+            seen.add(name)
+        if name not in net:
+            assert not imported & net_modules, (name, imported & net_modules)
+        if name != "mayhem/update.py":
+            assert "api.github.com" not in text, name
+    assert seen == net
 
 
 def test_the_guard_scan_catches_an_unguarded_call():

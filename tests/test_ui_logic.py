@@ -10,6 +10,7 @@ and stats.json only ever lives in pytest's tmp_path.
 import copy
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.request
@@ -936,14 +937,39 @@ def test_single_instance_with_a_private_name():
     assert "GlassMacro" not in M.SINGLE_INSTANCE_MUTEX + M.APP_USER_MODEL_ID
 
 
+def _update_section(src: str) -> tuple[str, str]:
+    """mayhemmacro.py split into (its Updates section, everything else). The
+    section runs from its banner to the next banner of the same kind."""
+    m = re.search(r"^    # =+ Updates ==\n.*?(?=^    # =+ [^\n]+ ==$)", src, re.S | re.M)
+    assert m, "the Updates section is missing"
+    return m.group(0), src[:m.start()] + src[m.end():]
+
+
 def test_source_rules():
     with open(M.__file__, encoding="utf-8") as fh:
         src = fh.read()
     low = src.lower()
-    for word in ("claude", "anthropic", "openai", "chatgpt", "github", "api.github"):
+    for word in ("claude", "anthropic", "openai", "chatgpt"):
         assert word not in low, word
+    # GitHub only comes up in the update code: the window's Updates section
+    # and mayhem/update.py, the one module that ever asks GitHub anything.
+    # The window never builds a GitHub address or opens a connection itself.
+    section, rest = _update_section(src)
+    assert "github" in section.lower()                   # the split found the real section
+    assert "github" not in rest.lower()
+    assert "api.github" not in low and "urlopen" not in low
     assert "self.title(APP_NAME)" in src                 # FindWindowW finds it by title
     assert "Made by" in src and "Ariliux" in src
+
+
+def test_the_update_section_split_is_strict():
+    src = ("x = 1\n"
+           "    # ===== About ==\n    about = 'github'\n"
+           "    # ===== Updates ==\n    upd = 'GitHub'\n"
+           "    # ===== screen checks ==\n    after = 2\n")
+    section, rest = _update_section(src)
+    assert "GitHub" in section and "about = 'github'" in rest and "after = 2" in rest
+    assert "upd" not in rest
 
 
 def test_every_page_has_both_icons_and_ten_pages():

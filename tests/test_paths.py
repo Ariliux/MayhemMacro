@@ -83,7 +83,7 @@ def test_import_creates_nothing(tmp_path):
     env = {k: v for k, v in os.environ.items() if k != "MAYHEM_DATA_DIR"}
     env.update(MAYHEM_TESTING="1", MAYHEM_NO_SEND="1", LOCALAPPDATA=str(tmp_path))
     code = (f"import sys; sys.path.insert(0, {ROOT!r}); "
-            "import mayhem.paths, mayhem.stats, mayhem.discord; print('ok')")
+            "import mayhem.paths, mayhem.stats, mayhem.discord, mayhem.update; print('ok')")
     r = subprocess.run([sys.executable, "-I", "-c", code], env=env, cwd=str(tmp_path),
                        capture_output=True, text=True, timeout=60,
                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -121,8 +121,9 @@ EXPECTED_DEFAULTS = {
                 "send": {"rare": True, "run": True, "rejoin": True, "storage": True,
                          "error": True, "stuck": True, "hourly": False},
                 "mention": {"rare": True, "error": True, "stuck": True}},
-    "check_updates": False,
+    "check_updates": True,
     "ui": {"geometry": "", "page": "home", "sidebar_collapsed": False, "pin": False},
+    "settings_version": 2,
 }
 
 
@@ -131,7 +132,29 @@ def test_defaults_are_exactly_the_design():
     assert paths.DEFAULT_SETTINGS["afk_bring_to_front"] is False
     assert paths.DEFAULT_SETTINGS["attach_picture"] is False
     assert paths.DEFAULT_SETTINGS["discord"]["enabled"] is False
-    assert paths.DEFAULT_SETTINGS["check_updates"] is False
+    assert paths.DEFAULT_SETTINGS["check_updates"] is True
+    assert paths.DEFAULT_SETTINGS["settings_version"] == paths.SETTINGS_VERSION
+
+
+# ---- 1.0.0's settings file ---------------------------------------------------
+def test_a_1_0_0_file_gets_update_checks_on(data):
+    """1.0.0 wrote "check_updates": false into every settings.json, with no
+    switch for it: that was only the old default, so it doesn't count."""
+    write(paths.settings_path(), json.dumps({"check_updates": False, "auto_vote": False,
+                                             "private_server_link": "x"}))
+    st = paths.load_settings()
+    assert st["check_updates"] is True
+    assert st["settings_version"] == 2
+    assert st["auto_vote"] is False and st["private_server_link"] == "x"   # the rest is kept
+
+
+def test_a_choice_saved_by_this_version_is_kept(data):
+    st = paths.load_settings()
+    st["check_updates"] = False                    # turned off on About or Settings
+    assert paths.save_settings(st)
+    assert json.loads((data / "settings.json").read_text())["settings_version"] == 2
+    assert paths.load_settings()["check_updates"] is False
+    assert paths.load_settings()["check_updates"] is False      # and stays off
 
 
 def test_no_file_gives_the_defaults_and_writes_nothing(data):

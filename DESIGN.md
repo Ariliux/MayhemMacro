@@ -25,10 +25,14 @@ does the work; the window only shows what the engine reports.
 - **The only program it closes or opens is Roblox**: `RobloxPlayerBeta.exe` of the current
   Windows user, and only to rejoin during a run you started. A run started while Roblox is
   in another game stops instead of touching that game; so does joining another game
-  mid-run.
-- **Network:** only your own Discord webhook, and only if you turn alerts on. Rejoining
-  opens your private server link through the `roblox://` protocol: no Roblox web API, no
-  cookies.
+  mid-run. The one exception is an update you said Yes to: then it starts the new
+  `MayhemMacro.exe`, closes, and the new version reopens the app (see [Updates](#updates)).
+- **Network:** your own Discord webhook, only if you turn alerts on, and one read-only
+  request to GitHub's API for this repo's newest release when the app opens and every
+  12 hours (`check_updates`, on by default, switched off on About or Settings). Updates
+  only come from this repo's releases and are only installed when their sha256 matches
+  the fingerprint GitHub lists. Rejoining opens your private server link through the
+  `roblox://` protocol: no Roblox web API, no cookies.
 - **Privacy:** the webhook URL, the private server link and your Discord id are never
   logged or shown unmasked. No picture is uploaded unless "Attach a picture of Roblox" is
   on, and then only a crop of the Roblox window.
@@ -168,12 +172,51 @@ Mayhem X join and `Entered play session.` within 120 s, then the `loaded` line w
 more. Failed tries back off 30 / 60 / 120 / 300 s; after 5 in a row the run stops with a
 "stuck" alert. At most 6 rejoins an hour.
 
+## Updates
+
+`mayhem/update.py` does the checking and installing; the window only asks and shows.
+
+- **Checking.** `GET https://api.github.com/repositories/1421452081/releases/latest`: the
+  repo by its permanent number, never by name (a deleted or renamed account's name can be
+  registered again; the number can't). The answer must still name `Ariliux/MayhemMacro`
+  (its API link, its page and the zip's link), so the number and the name are the same
+  repo. Drafts, pre-releases, rate limits and no network are all "no news". Nothing about
+  you goes along, only `MayhemMacro/<version>` as the User-Agent.
+- **What it installs.** Only the asset `MayhemMacro-v<version>.zip` for that release's own
+  version, linked under `https://github.com/Ariliux/MayhemMacro/releases/download/`, with a
+  `sha256:` digest from GitHub. The download is hashed on the way and thrown away on a
+  mismatch. A release without such a zip is still shown as "out", just not installed.
+- **Asking.** A newer version puts a link in the sidebar footer, a dot on About and the
+  question "v1.0.1 is available. Do you want to update?" as a card inside the window
+  (never a Windows pop-up, so it can't take focus). Never during a run: found during one,
+  it asks 1.5 s after the run stops; a question on screen goes away when a run starts and
+  comes back after it; a Yes given during a run is kept and acted on when it stops.
+- **Installing** (only the built app, `sys.frozen`, in a folder it can write to; from
+  source it only says a new version is out):
+  1. the zip goes to `%LOCALAPPDATA%\MayhemMacro\update\` and is unpacked to `update\new\`
+     (nothing may land outside; a list of every file and its size is kept);
+  2. the new `MayhemMacro.exe` is started with
+     `--finish-update <install folder> <old pid> <old version>` and the app closes. These
+     arguments are a contract between versions and never change;
+  3. the new version waits for the old one to end, copies `_internal` and the exe in next
+     to the install as `.new`, checks them against the list, then switches over with three
+     renames (undone if one fails; nothing changes if the old app is still running), and
+     opens the updated app;
+  4. that first start says "updated" and removes `update\` and `_internal.old` 20 s later.
+- **Never touched:** `settings.json`, `stats.json` and `events\`. Only `MayhemMacro.exe` and
+  `_internal` in the install folder are replaced; anything else there stays.
+
+Every request, the swap, the install, the clean-up and every program start call
+`safety.guard()` first.
+
 ## Settings
 
 `%LOCALAPPDATA%\MayhemMacro\settings.json`, saved atomically (temp file, fsync, replace).
 Missing keys get their defaults, a value of the wrong type is replaced by the default, and
 a file that can't be read is renamed to `settings.corrupt-<n>.json`. The defaults are in
-`mayhem/paths.py` (`DEFAULT_SETTINGS`).
+`mayhem/paths.py` (`DEFAULT_SETTINGS`). `settings_version` is 2: a file without it is from
+1.0.0, which saved `"check_updates": false` with no switch for it, so that value is dropped
+once and the default (on) applies.
 
 ## The code
 
@@ -191,6 +234,7 @@ mayhem/inputs.py     SendInput: Space, relative mouse moves, clicks
 mayhem/rejoin.py     link parsing, closing and opening Roblox
 mayhem/discord.py    the webhook sender and the alert messages
 mayhem/stats.py      stats.json
+mayhem/update.py     the update check, download, unpacking and file swap
 mayhem/overlay.py    the session bar
 mayhem/engine.py     the run loop (one thread)
 mayhemmacro.py       the window

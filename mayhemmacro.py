@@ -34,7 +34,7 @@ import tkinter.font as tkfont
 
 from mayhem import APP_NAME, APP_VER, MAPS
 from mayhem import discord as D
-from mayhem import paths, rejoin, safety
+from mayhem import paths, rejoin, safety, update
 from mayhem import stats as S
 from mayhem.blocks import display_name
 
@@ -1274,12 +1274,15 @@ class MayhemMacro(ctk.CTk):
         self._snap = copy.deepcopy(self.settings)
         self._save_job = None
         self.session = Session(lambda: self.settings, log=self._hook_log)
+        self._init_updates()
 
         self._build()
         self._drain()
         self._hotkey_handle = self._register_hotkey()
         self.log(f"--- {APP_NAME} v{APP_VER} opened ---")
         self._warn_display()
+        self._after_update()
+        self._start_update_checks()
         self.protocol("WM_DELETE_WINDOW", self._close)
 
     # -- cross-thread UI. tkinter's after() is not thread safe, so workers
@@ -1698,6 +1701,7 @@ class MayhemMacro(ctk.CTk):
                                     anchor="w", justify="left",
                                     wraplength=184, height=16)
         self.lbl_res.pack(side="left", padx=20)
+        self._build_update_link(foot)
 
         nav = ctk.CTkFrame(side, fg_color="transparent")
         nav.pack(fill="both", expand=True)
@@ -1946,7 +1950,9 @@ class MayhemMacro(ctk.CTk):
         """Idle / Running / Paused... worked out fresh from the state the
         card already shows, so the two can never disagree."""
         try:
-            if self._run_mode == "RUNNING" and self._mode == "paused":
+            if getattr(self, "_updating", False):
+                text, colour = "Updating", ACCENT
+            elif self._run_mode == "RUNNING" and self._mode == "paused":
                 text, colour = "Paused", AMBER
             elif self._run_mode == "RUNNING" and self._mode == "rejoining":
                 text, colour = "Rejoining", AMBER
@@ -2295,8 +2301,8 @@ class MayhemMacro(ctk.CTk):
     # ---- sidebar badges ----
     def _paint_badges(self):
         """Activity: unread count. Log: red dot after an error line.
-        Discord: On. World vote: On while it votes. In the rail every badge
-        is a dot on the icon."""
+        Discord: On. World vote: On while it votes. About: a dot when a
+        newer version is out. In the rail every badge is a dot on the icon."""
         nav = getattr(self, "_nav", None)
         if not nav:
             return
@@ -2311,6 +2317,8 @@ class MayhemMacro(ctk.CTk):
             want["discord"] = ("On", GREEN_DIM, GREEN)
         if self.settings.get("auto_vote") is True and self.settings.get("vote_maps"):
             want["vote"] = (str(len(self.settings["vote_maps"])), ACCENT_DIM, ACCENT)
+        if getattr(self, "_update_info", None):
+            want["about"] = (None, None, ACCENT)      # a newer version is out
         for key, n in nav.items():
             b = want.get(key)
             sig = (b, self._rail)
@@ -4546,6 +4554,11 @@ class MayhemMacro(ctk.CTk):
             on=self._ui_set("remember", True) is not False,
             command=lambda: self._ui_switched("remember", self.sw_remember))
 
+        self._group(sp, "UPDATES")
+        card = self._card(sp, corner_radius=14)
+        card.pack(fill="x")
+        self._update_switch_row(card)        # the same switch as on About
+
         self._group(sp, "DISPLAY")
         card = self._card(sp, corner_radius=14)
         card.pack(fill="x")
@@ -4713,6 +4726,8 @@ class MayhemMacro(ctk.CTk):
                                           font=self.F(11, semi=True))
         self.lbl_res_about.pack(side="left", padx=(6, 0))
 
+        self._build_update_card(sp)
+
         self._group(sp, "SHORTCUTS")
         card = self._card(sp, corner_radius=14)
         card.pack(fill="x")
@@ -4732,11 +4747,427 @@ class MayhemMacro(ctk.CTk):
             ctk.CTkLabel(row, text=what, text_color=TEXT, font=self.F(12),
                          anchor="w", height=18).pack(side="left",
                                                      padx=(12, 0))
-        ctk.CTkLabel(sp, text="Your data stays on this PC. The only thing it "
-                              "ever sends is your own Discord alerts, when "
-                              "you turn them on.",
+        ctk.CTkLabel(sp, text=self.PRIVACY_NOTE,
                      text_color=MUTED, font=self.F(11), height=16
                      ).pack(pady=(16, 8))
+
+    # ============================================================= Updates ==
+    # One read-only request to GitHub for this repo's newest release, when the
+    # app opens and every 12 hours (mayhem/update.py does the asking and the
+    # installing). It never asks and never updates during a run: both wait
+    # until the run stops. From source it only says a new version is out;
+    # only the built app replaces itself. GitHub is only mentioned in this
+    # section (tests/test_ui_logic.py checks).
+    UPDATE_NOTE = ("When it opens and every 12 hours it asks GitHub if there's a "
+                   "newer version. Nothing about you is sent.")
+    PRIVACY_NOTE = ("Your data stays on this PC. It only sends your own Discord "
+                    "alerts (if you turn them on) and asks GitHub for updates.")
+
+    def _init_updates(self):
+        self._update_info = None            # the newer release found, or None
+        self._update_asked = False          # asked about it (until asked again)
+        self._update_pending = False        # found during a run: ask once it stops
+        self._update_yes_pending = False    # Yes during a run: update once it stops
+        self._updating = False
+        self._checking = False
+        self._upd_was_running = False
+        self._update_switches = []          # About's and Settings' switch
+        self._ask_box = None
+
+    def _build_update_card(self, sp):
+        """About's UPDATES card: the switch, what the last check found and
+        Check now."""
+        self._group(sp, "UPDATES")
+        card = self._card(sp, corner_radius=14)
+        card.pack(fill="x")
+        self._update_switch_row(card)
+        self._hairline(card)
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=14, pady=10)
+        self.btn_check = self._ghost(row, "Check now", self._check_now)
+        self.btn_check.configure(width=100)
+        self.btn_check.pack(side="right")
+        self.lbl_upd = ctk.CTkLabel(row, text="", text_color=SUBTLE,
+                                    font=self.F(12), anchor="w", height=18)
+        self.lbl_upd.pack(side="left", fill="x", expand=True)
+        # once an update is found the line asks again (in the narrow rail the
+        # sidebar's link is folded away)
+        self.lbl_upd.bind("<Button-1>", lambda _e: self._open_update())
+        self._paint_upd()
+
+    def _update_switch_row(self, card, first=True):
+        holder = []
+        sw = self._switch_row(card, "Check for updates", self.UPDATE_NOTE,
+                              first=first,
+                              on=self.settings.get("check_updates", True) is True,
+                              command=lambda: self._update_switched(holder[0]))
+        holder.append(sw)
+        self._update_switches.append(sw)
+        return sw
+
+    def _build_update_link(self, foot):
+        """The sidebar footer's 'Update 1.0.1 available' link, shown in place
+        of the screen line once a newer version is found."""
+        self.lnk_update = ctk.CTkLabel(foot, text="", text_color=ACCENT,
+                                       font=self.F(11, semi=True), anchor="w",
+                                       height=16, cursor="hand2")
+        self.lnk_update.bind("<Button-1>", lambda _e: self._open_update())
+
+    def _update_switched(self, sw):
+        on = bool(sw.get())
+        self.settings["check_updates"] = on
+        self._changed()
+        for other in self._update_switches:      # About and Settings agree
+            if other is not sw and bool(other.get()) != on:
+                other.select() if on else other.deselect()
+        self._paint_upd()
+
+    def _paint_upd(self, note=None, colour=None):
+        """About's update line: what the last check found."""
+        lbl = getattr(self, "lbl_upd", None)
+        if lbl is None:
+            return
+        info = self._update_info
+        if note is None and info:
+            v = info.get("version", "")
+            note, colour = ((f"Version {v} is out · click here to update"
+                             if update.frozen() else
+                             f"Version {v} is out · this copy runs from source"),
+                            ACCENT)
+        elif note is None:
+            note = ("Checks when it opens and every 12 hours."
+                    if self.settings.get("check_updates", True) is True
+                    else "Update checks are off.")
+        elif note.startswith("update check: up to date"):
+            note, colour = f"Up to date · checked {time.strftime('%H:%M')}", GREEN
+        elif note.startswith("update check:"):
+            note, colour = "Couldn't reach GitHub · it'll try again later.", AMBER
+        try:
+            lbl.configure(text=note, text_color=colour or SUBTLE,
+                          cursor="hand2" if info else "")
+        except Exception:
+            pass
+
+    def _paint_update_link(self):
+        """Sidebar footer: the update link instead of the screen line."""
+        info = self._update_info
+        try:
+            if info:
+                self.lnk_update.configure(
+                    text=f"Update {info.get('version', '')} available ›")
+                self.lbl_res.pack_forget()
+                if not self.lnk_update.winfo_manager():
+                    self.lnk_update.pack(side="left", padx=20)
+            else:
+                self.lnk_update.pack_forget()
+                if not self.lbl_res.winfo_manager():
+                    self.lbl_res.pack(side="left", padx=20)
+        except Exception:
+            pass
+
+    def _paint_check_button(self):
+        try:
+            self.btn_check.configure(
+                state="disabled" if self._checking else "normal",
+                text="Checking…" if self._checking else "Check now")
+        except Exception:
+            pass
+
+    def _start_update_checks(self):
+        """The background check. Never while testing: tests drive
+        _check_updates_once with a fake answer instead."""
+        if safety.testing():
+            return
+        threading.Thread(target=self._update_worker, daemon=True,
+                         name=f"{APP_NAME} updates").start()
+
+    def _update_worker(self):
+        """Background thread: ask once the window has settled, then every
+        UPDATE_EVERY seconds until a newer version turns up. Only touches the
+        window through _ui()."""
+        time.sleep(4)
+        # Check now on About may find it first: then this loop is done too
+        while not (self._update_info or self._check_updates_once()):
+            time.sleep(update.UPDATE_EVERY)
+
+    def _check_updates_once(self):
+        """One check, from any thread. True once a newer release has been
+        found (and handed to the window). With the switch off, GitHub is
+        never even asked."""
+        if self.settings.get("check_updates", True) is not True:
+            return False
+        info = update.release_info()
+        if info and update.is_newer(info.get("version")):
+            self._ui(lambda i=info: self._show_update(i))
+            return True                      # one notice is enough
+        # one quiet line on the Log page and in log.txt, so "did it even
+        # check?" has an answer
+        note = (f"update check: up to date (latest on GitHub is {info['version']})"
+                if info else "update check: couldn't reach GitHub - will try later")
+        self._ui(lambda n=note: (self.log(n), self._paint_upd(n)))
+        return False
+
+    def _check_now(self):
+        """About's Check now: one check on its own thread, only from this
+        click."""
+        if self._checking:
+            return
+        if self._update_info:                # already found: ask again
+            self._paint_upd()
+            self._open_update()
+            return
+        if self.settings.get("check_updates", True) is not True:
+            self._paint_upd("Turn on Check for updates first.", AMBER)
+            return
+        self._checking = True
+        self._paint_check_button()
+
+        def run():
+            try:
+                self._check_updates_once()
+            except Exception:
+                pass
+            finally:
+                self._ui(self._check_done)
+        threading.Thread(target=run, daemon=True, name=f"{APP_NAME} check").start()
+
+    def _check_done(self):
+        self._checking = False
+        self._paint_check_button()
+        if self._update_info:
+            return                           # _show_update has said it already
+        try:
+            text = self.lbl_upd.cget("text")
+            colour = self.lbl_upd.cget("text_color")
+        except Exception:
+            return
+        self._toast(text, {GREEN: "ok", AMBER: "warn"}.get(colour, "info"))
+
+    def _show_update(self, info):
+        """A newer release turned up (Tk thread)."""
+        prev = self._update_info
+        if prev and prev.get("version") == info.get("version"):
+            return              # Check now and the background check both found it
+        self._update_info = info
+        self._update_asked = False
+        self.log(f"update available: {APP_NAME} {info.get('version', '')}")
+        self._paint_update_link()
+        self._paint_upd()
+        self._paint_badges()
+        self._ask_update()
+
+    def _open_update(self):
+        """The sidebar link and About's line: ask again, the same way."""
+        if not self._update_info:
+            return
+        self._update_asked = False
+        self._ask_update()
+
+    def _ask_update(self):
+        """'v1.0.1 is available. Do you want to update?' Never during a run:
+        that would end someone's AFK session, so it waits for the run to stop
+        (see _update_tick). From source there's nothing to install, so it
+        only says the new version is out."""
+        info = self._update_info
+        if not info or self._updating:
+            return
+        if self.running:
+            self._update_pending = True
+            return
+        if self._update_asked:
+            return
+        self._update_asked = True
+        self._update_pending = False
+        version = info.get("version", "")
+        if not update.frozen():
+            self._toast(f"{APP_NAME} {version} is out · this copy runs from "
+                        f"source, so it doesn't update itself", "info")
+            return
+        self._show_update_question(version)
+
+    def _show_update_question(self, version):
+        """The question as a card inside the window: never a Windows pop-up,
+        so it can't take focus from Roblox or anything else."""
+        if self._ask_box is None:
+            box = ctk.CTkFrame(self, fg_color=CARD_HI, corner_radius=16,
+                               border_width=1, border_color=ACCENT_DEEP)
+            inner = ctk.CTkFrame(box, fg_color="transparent")
+            inner.pack(padx=24, pady=(18, 16))
+            self._ask_text = ctk.CTkLabel(inner, text="", text_color=TEXT,
+                                          font=self.F(14), anchor="w",
+                                          justify="left")
+            self._ask_text.pack(fill="x")
+            row = ctk.CTkFrame(inner, fg_color="transparent")
+            row.pack(fill="x", pady=(14, 0))
+            ctk.CTkButton(row, text="Yes", width=84, height=30, corner_radius=10,
+                          fg_color=ACCENT, hover_color=ACCENT_SOFT, text_color=INK,
+                          font=self.F(12, semi=True),
+                          command=lambda: self._answer_update("yes")
+                          ).pack(side="right")
+            self._ghost(row, "No", lambda: self._answer_update("no")
+                        ).pack(side="right", padx=(0, 8))
+            self._ask_box = box
+        try:
+            self._ask_text.configure(
+                text=f"v{version} is available.\nDo you want to update?")
+            self._ask_box.place(relx=0.5, rely=0.5, anchor="center")
+            self._ask_box.lift()
+        except Exception:
+            pass
+
+    def _update_question_shown(self) -> bool:
+        try:
+            return bool(self._ask_box is not None and self._ask_box.winfo_manager())
+        except Exception:
+            return False
+
+    def _hide_update_question(self):
+        try:
+            if self._ask_box is not None:
+                self._ask_box.place_forget()
+        except Exception:
+            pass
+
+    def _answer_update(self, choice):
+        """Yes or No on the question card."""
+        self._hide_update_question()
+        self._update_answer(choice)
+
+    def _update_answer(self, choice):
+        self.log(f"update question: {choice or 'not answered'}")
+        if choice != "yes":
+            self._toast("Okay · About has the update whenever you want it", "info")
+            return
+        if self.running:
+            # Yes, then a run started before it got going: keep the Yes and
+            # update the moment the run stops (see _update_tick)
+            self._update_yes_pending = True
+            self.log("update: will install when this run stops")
+            return
+        self._start_update()
+
+    def _update_tick(self):
+        """Once a second (from _tick): no question stays up during a run, and
+        a question or a Yes that had to wait goes ahead once the run stops."""
+        if self.running:
+            self._upd_was_running = True
+            if self._update_question_shown():
+                self._hide_update_question()
+                self._update_asked = False
+                self._update_pending = True
+            return
+        if not self._upd_was_running:
+            return
+        self._upd_was_running = False
+        if self._update_yes_pending:
+            self._update_yes_pending = False
+            self.after(1500, self._start_update)
+        elif self._update_pending:
+            self.after(1500, self._ask_update)
+
+    def _start_update(self):
+        """After a Yes: download, unpack, hand over and close. Only the built
+        app does this; any other copy gets the download page instead."""
+        info = self._update_info
+        if self.running or self._updating or not info:
+            return
+        stopping = getattr(self, "_stopping", None)
+        if stopping is not None and stopping.is_alive():
+            self.after(1000, self._start_update)     # the last run is still ending
+            return
+        if not update.can_self_update(info):
+            self.log("update: this copy can't update itself - opening the "
+                     "download page")
+            self._open_release_page()
+            return
+        self._updating = True
+        self._hide_update_question()
+        self._show_page("home")
+        self.set_state(f"Updating to {info['version']}", "Downloading · 0%", ACCENT)
+        threading.Thread(target=self._update_job, args=(info,), daemon=True,
+                         name=f"{APP_NAME} update").start()
+
+    def _update_job(self, info):
+        """Worker thread: download, check, unpack, then hand over to the new
+        version and close. Any failure: nothing changes."""
+        title = f"Updating to {info['version']}"
+        try:
+            zip_path = os.path.join(update.update_dir(),
+                                    f"MayhemMacro-v{info['version']}.zip")
+            shown = [None]
+
+            def progress(done, total):
+                total = total or info.get("size") or 0
+                if total:
+                    pct = min(100, int(done * 100 / total))
+                    key, text = pct, f"Downloading · {pct}% of {total / 1048576:.0f} MB"
+                else:
+                    mb = int(done / 1048576)
+                    key, text = -1 - mb, f"Downloading · {mb} MB"
+                if key != shown[0]:
+                    shown[0] = key
+                    self._ui(lambda t=text: self.set_state(title, t, ACCENT))
+            if not update.download_update(info["zip"], info["sha256"], zip_path,
+                                          progress):
+                raise RuntimeError("the download didn't finish or didn't match "
+                                   "its fingerprint on GitHub")
+            self._ui(lambda: self.set_state(title, "Unpacking…", ACCENT))
+            new_exe = update.stage_update(zip_path, update.staging_dir())
+            try:
+                os.remove(zip_path)
+            except OSError:
+                pass
+            if not new_exe:
+                raise RuntimeError(f"the download wasn't a {APP_NAME} build")
+            update.hand_over(new_exe, update.install_dir(), os.getpid(), APP_VER)
+            self._ui(lambda: self.log(f"update: handing over to {info['version']} "
+                                      f"- {APP_NAME} will reopen by itself"))
+            self._ui(self._close)
+        except Exception as exc:
+            self._ui(lambda e=str(exc): self._update_failed(e))
+
+    def _update_failed(self, why):
+        self._updating = False
+        self.log(f"update failed: {why}", "warn")
+        self.set_state("Update didn't work", "Nothing changed. The download page "
+                                             "has the new version.", RED)
+        self._toast("The update didn't work · nothing changed", "warn",
+                    ("Download page", self._open_release_page))
+
+    def _open_release_page(self):
+        """The release page in the browser, only ever after a Yes or a click.
+        The link is this repo's own (update.parse_release checks)."""
+        page = (self._update_info or {}).get("page") or update.RELEASES_URL
+        try:
+            safety.guard("open the release page")
+            os.startfile(page)
+        except safety.SideEffectBlocked:
+            self._toast("Opening the browser is off while testing", "info")
+        except Exception as exc:
+            self.log(f"couldn't open the release page: {exc}", "warn")
+
+    def _after_update(self):
+        """The first start after an update: say so, and tidy the update folder
+        once the hand-over has had time to end. Any other start leaves that
+        folder alone: a hand-over might be running from it right then."""
+        try:
+            old = update.take_updated_note()
+        except Exception:
+            old = None
+        if not old:
+            return
+        self.log(f"updated: {APP_NAME} {old} -> {APP_VER}")
+        self._toast(f"Updated to {APP_VER} · your settings and stats are as they were",
+                    "ok")
+        target = update.install_dir() if update.frozen() else None
+
+        def tidy():
+            time.sleep(20)
+            try:
+                update.tidy_after_update(target)
+            except Exception:
+                pass
+        threading.Thread(target=tidy, daemon=True, name=f"{APP_NAME} tidy").start()
 
     # ======================================================= screen checks ==
     def _paint_res(self, sw, sh, pct):
@@ -5080,6 +5511,10 @@ class MayhemMacro(ctk.CTk):
             self._paint_pill()
         except Exception:
             pass
+        try:
+            self._update_tick()
+        except Exception:
+            pass
         self.after(1000, self._tick)
 
     @staticmethod
@@ -5123,6 +5558,12 @@ class MayhemMacro(ctk.CTk):
             return None
 
     def toggle_run(self):
+        if getattr(self, "_updating", False):
+            # an update is downloading or handing over: the app closes and
+            # reopens by itself in a moment
+            self._toast(f"Updating · {APP_NAME} reopens by itself in a moment",
+                        "info")
+            return
         # Holding F1/F2 auto-repeats and a double-click comes twice: one toggle per second.
         now = time.monotonic()
         if now - getattr(self, "_last_toggle", -9.0) < 1.0:
@@ -5376,6 +5817,16 @@ def _colour(name: str) -> str:
 
 
 def main() -> None:
+    # Started by an older version to finish an update (built app only): put
+    # the new files in place, open the updated app and end. No window, and
+    # no single-instance claim: the old app may still be closing.
+    if update.finishing(sys.argv):
+        try:
+            update.finish_update(sys.argv[2], sys.argv[3], sys.argv[4],
+                                 log=write_log_line)
+        except Exception as exc:
+            write_log_line(f"update failed: {type(exc).__name__}: {exc}")
+        return
     # Its own taskbar id: from source, Windows would group the window under
     # python; as the app, it keeps the taskbar from showing an icon it cached
     # for an older build of the same .exe (and keeps it apart from GlassMacro).

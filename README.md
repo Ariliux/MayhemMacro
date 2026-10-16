@@ -64,6 +64,10 @@ below explains what to do.
 Your settings, stats and log are saved in `%LOCALAPPDATA%\MayhemMacro`. If you ever want it
 gone, delete the MayhemMacro folder and that one, and that's everything.
 
+You only have to download it once: after that it updates itself (see
+[Using it](#using-it)). Still on 1.0.0? That one can't update itself yet, so grab the
+newest version by hand one time.
+
 ## Setting it up
 
 1. **Server page:** copy your private server link in Roblox (the server's **Copy link**, or
@@ -80,14 +84,21 @@ gone, delete the MayhemMacro folder and that one, and that's everything.
   everywhere, so one press would start or stop both.
 - If Roblox is in another game when you press Start, the run stops right away instead of
   touching that game. Join Block Mayhem X first.
+- **It updates itself.** When a new version is out, it asks *"v1.0.1 is available. Do you
+  want to update?"* right in its window. Say **Yes** and it downloads the new version,
+  closes, swaps its files and opens again by itself. Your settings and stats stay exactly
+  as they were. It never asks or updates in the middle of a run: it waits until you stop.
+  Missed the question? Click the **Update … available** link at the bottom of the
+  sidebar, or **Check now** on the About page.
 - The pages are down the left side:
   - **Home** shows what it's doing right now, the world, the vote timer, your storage and
     the run's counters.
   - **Activity** lists what happened in plain English, newest first.
   - **Alerts**, **World vote**, **Server** and **Discord** are the setup above.
   - **Stats** keeps your totals from every run, **Log** has every detail.
-  - **Settings** has the start-of-run steps, the session bar and keeping the PC awake.
-  - **About** has the version and every keyboard shortcut.
+  - **Settings** has the start-of-run steps, the session bar, keeping the PC awake and
+    update checks.
+  - **About** has the version, update checks and every keyboard shortcut.
 
 ## Discord alerts
 
@@ -152,9 +163,15 @@ nothing you download ever should.
   - It only presses keys and clicks inside Roblox, while Roblox is in front.
   - It listens for F1 and F2 to start and stop. It doesn't record anything else you type.
   - The only program it ever closes or opens is Roblox (`RobloxPlayerBeta.exe`), and only
-    to rejoin during a run you started.
-  - The only place it ever contacts is your own Discord webhook, and only if you turn
-    alerts on. There are no update checks and nothing goes to GitHub or anywhere else.
+    to rejoin during a run you started. The one exception is an update you said Yes to:
+    then it closes itself and opens the new version.
+  - It only ever contacts two places. Your own Discord webhook, and only if you turn alerts
+    on. And GitHub: when it opens (and every 12 hours while it's open) it checks this
+    repo's latest release to see if there's a new version. You can turn that off in About
+    or Settings (**Check for updates**). Nothing about you is sent.
+  - Updates only ever come from this repo's releases, and it only installs one if the
+    file's fingerprint (its SHA-256) matches the one GitHub lists for it. If anything
+    doesn't match, it throws the download away and changes nothing.
   - The pictures it saves (vote screens, rare blocks) stay in your data folder.
 
 ## Found a bug?
@@ -172,10 +189,12 @@ py -3.14 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-Then double-click `run_mayhem.pyw`. The tests run with
-`.venv\Scripts\python.exe -m pytest -q tests`. They never press a key, move the mouse, touch
-Roblox or send anything. A few read real Roblox logs and screenshots in `tests/fixtures`,
-which aren't in the repo, so those skip. `DESIGN.md` explains how it works inside.
+Then double-click `run_mayhem.pyw`. Running from source, it only tells you when a new
+version is out; it doesn't update itself (just pull the new code). The tests run with
+`.venv\Scripts\python.exe -m pytest -q tests`. They never press a key, move the mouse,
+touch Roblox, start a program or send anything. A few read real Roblox logs and
+screenshots in `tests/fixtures`, which aren't in the repo, so those skip. `DESIGN.md`
+explains how it works inside.
 
 ## My other macros
 
