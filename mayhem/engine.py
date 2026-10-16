@@ -69,6 +69,26 @@ CHAT_EVERY = 2.0            # read the chat for 'has collected' lines this often
 FIND_QUIET = 120.0          # the same find again only after it was gone this long
 BANNER_TEXT_QUIET = 600.0   # write an unknown banner text to the log at most this often
 BANNER_TEXT_WORDS = 4       # shorter scraps are scenery, not banners
+# The game's own banners that mean nothing for the macro (worker abilities,
+# the vote result, the worker pool): never logged. Letters only, lower case,
+# short enough to survive OCR slips.
+KNOWN_BANNERS = ("ritual", "generat", "frenzy", "duplicat", "golden", "touch", "summoning",
+                 "votingconclud", "newworld", "pickedup", "workerpool", "activated")
+
+
+def _reads_clean(text: str) -> bool:
+    """OCR read it properly: real words only (letters, digits, normal
+    punctuation), no stray symbols, no glued-together words."""
+    if re.search(r"[^A-Za-z0-9 ,.!?'()/:-]", text):
+        return False
+    words = [w.strip(",.!?'():") for w in text.split()]
+    words = [w for w in words if w]
+    if not words:
+        return False
+    good = sum(1 for w in words if re.fullmatch(r"[A-Za-z]+|[0-9][0-9,]*|[0-9]+/[0-9,]+", w)
+               and not re.search(r"[a-z][A-Z]", w) and len(w) <= 14
+               and (len(w) > 1 or w in ("a", "A", "I") or w.isdigit()))
+    return good / len(words) >= 0.9
 
 # Anti-AFK. Roblox kicks after 20 idle minutes.
 AFK_MIN, AFK_MAX = 2, 15    # minutes: anti_afk_after_min is kept inside this
@@ -865,14 +885,21 @@ class Engine:
                   else f"A worker picked up {what}{odds}.")
 
     def _note_banner_text(self, now: float, lines: list[str]) -> None:
-        """Banners that are not spawns go in the log, so new kinds can be
-        learned. Each text once per BANNER_TEXT_QUIET."""
+        """Banners that aren't spawns go in the log so new kinds can be learned,
+        but only when they read cleanly: the game's own worker banners (Ritual,
+        Fragment Frenzy, Golden Touch...) are skipped, OCR scraps are skipped,
+        and near-copies of a banner already logged are skipped."""
+        import difflib
         for text in lines:
             t = " ".join(str(text).split())
-            if len(t.split()) < BANNER_TEXT_WORDS:
+            if len(t.split()) < BANNER_TEXT_WORDS or not _reads_clean(t):
+                continue
+            flat = re.sub(r"[^a-z]", "", t.lower())
+            if any(k in flat for k in KNOWN_BANNERS):
                 continue
             k = t.lower()
-            if now - self._banner_texts.get(k, _NEVER) < BANNER_TEXT_QUIET:
+            if any(now - at < BANNER_TEXT_QUIET and difflib.SequenceMatcher(None, k, old).ratio() >= 0.8
+                   for old, at in self._banner_texts.items()):
                 continue
             self._banner_texts[k] = now
             if len(self._banner_texts) > 200:

@@ -1117,11 +1117,11 @@ def test_known_block_without_a_number_uses_the_table():
 
 def test_unknown_banner_text_is_logged_once():
     r = Rig().start()
-    r.ocr.script["banner"] = ["Necromancer has activated Ritual and generated a Epic block!",
+    r.ocr.script["banner"] = ["A meteor shower is happening now!",
                               "e)", "12"]
     r.run(30)
     banners = [t for t in r.logs("info") if t.startswith("Banner:")]
-    assert banners == ['Banner: "Necromancer has activated Ritual and generated a Epic block!"']
+    assert banners == ['Banner: "A meteor shower is happening now!"']
     assert r.of("rare") == []
 
 
@@ -1802,7 +1802,7 @@ def test_real_frame_necromancer_banner_is_logged_not_alerted(real_ocr):
     r = _frame_rig(real_ocr, "215112.jpg")
     r.tick()
     assert r.of("rare") == []
-    assert any(t.startswith("Banner:") and "Necromancer" in t for t in r.logs("info"))
+    assert not any("Necromancer" in t for t in r.logs("info"))   # worker banners are noise now
     hud_ev = r.of("hud")[-1]
     assert hud_ev["timer"] == 499 and hud_ev["storage"] == [216, 350]
 
@@ -1859,3 +1859,21 @@ def test_medal_clip_after_a_rare_spawn_at_your_setting():
     r.run(5)
     assert pressed == ["F4"]
     assert any("Medal" in t for t in r.logs("info"))
+
+
+@pytest.mark.parametrize("text, logged", [
+    ("F agmint Frenzy Duplicated your Aqua loc f!", False),
+    ("Fragment Frenzy Duplicated your Rare block!", False),
+    ("z u Ilcatea your N", False),
+    ("Void King has activated Ritual and generated a Rare block!", False),
+    ("Kin has and generat d R", False),
+    ("Domh•tor •ctiv•ted Golden Touch'", False),
+    ("The worker summoning pool has refreshed!", False),
+    ("World voting concluded! The new world is Dreamland,", False),
+    ("A meteor shower is happening now!", True),
+])
+def test_only_clean_unknown_banners_are_logged(text, logged):
+    r = Rig().start()
+    r.ocr.script["banner"] = [text]
+    r.tick()
+    assert any(text[:20] in t for t in r.logs("info")) is logged
