@@ -213,7 +213,8 @@ def test_payload_mentions():
     assert p3["content"] == "" and "users" not in p3["allowed_mentions"]
     assert p4["content"] == f"<@{USER}>" and p4["allowed_mentions"]["users"] == [USER]
     assert p1["username"] == "MayhemMacro"
-    assert set(p1) == {"username", "content", "allowed_mentions", "embeds"}
+    assert set(p1) == {"username", "avatar_url", "content", "allowed_mentions", "embeds"}
+    assert p1["avatar_url"].endswith("/docs/icon.png")
 
 
 def test_webhook_defaults_match_settings():
@@ -638,34 +639,34 @@ def fields(embed):
 
 def test_rare_banner():
     e = D.rare_message("Resonance", 100000, "normal", "Dreamland", "banner")
-    assert e["title"] == "Resonance spawned!"
-    assert fields(e) == {"Rarity": "1 in 100,000", "World": "Dreamland"}
-    assert e["color"] == D.HOOK_RARE
+    assert e["title"].endswith("Resonance spawned!")
+    assert fields(e) == {"Rarity": "**1 in 100,000**", "Tier": "\U0001F48E Rare", "World": "Dreamland"}
+    assert e["color"] == D.tier(100_000)[1]
     assert e["footer"]["text"] == f"MayhemMacro {APP_VER}"
 
 
 def test_rare_world_unknown_and_no_number():
     e = D.rare_message("Resonance", None, "normal", None, "banner")
-    assert e["title"] == "Resonance spawned!" and fields(e) == {}
+    assert e["title"].endswith("Resonance spawned!") and fields(e) == {"Tier": "\U0001F48E Rare"}
 
 
 def test_rare_from_the_log():
     e = D.rare_message("Sporedelic", 100000, "normal", "Void", "log_song")
-    assert e["title"] == "Sporedelic appeared!"
-    assert fields(e)["Rarity"] == "1 in 100,000"
+    assert e["title"].endswith("Sporedelic appeared!")
+    assert fields(e)["Rarity"] == "**1 in 100,000**"
     c = D.rare_message("vexen", None, "chromatic", None, "log_chromatic")
-    assert c["title"] == "A Chromatic Vexen was on your server"
-    assert "late" in c["description"] and c["color"] == D.HOOK_CHROMATIC
+    assert c["title"].endswith("A Chromatic Vexen was on your server")
+    assert "late" in c["description"] and c["color"] == D.tier(None)[1]
     c2 = D.rare_message("vexen", None, "normal", None, "log_chromatic")
-    assert c2["title"] == "A Chromatic Vexen was on your server"
+    assert c2["title"].endswith("A Chromatic Vexen was on your server")
 
 
 def test_rare_variants():
     e = D.rare_message("Resonance", 100000, "inverted", None, "banner")
-    assert e["title"] == "Inverted Resonance spawned!" and e["color"] == D.HOOK_INVERTED
+    assert e["title"].endswith("Inverted Resonance spawned!") and e["color"] == D.tier(100000)[1]
     e = D.rare_message("Chromatic Vexen", 50000, "chromatic", None, "banner")
-    assert e["title"] == "Chromatic Vexen spawned!", "no doubled prefix"
-    assert D.rare_message("", None)["title"] == "A rare block spawned!"
+    assert e["title"].endswith("Chromatic Vexen spawned!"), "no doubled prefix"
+    assert D.rare_message("", None)["title"].endswith("A rare block spawned!")
 
 
 def test_run_messages():
@@ -742,5 +743,17 @@ def test_whole_alert_through_the_sender(sending):
     p = ft.payloads()[0]
     assert p["username"] == "MayhemMacro" and p["content"] == ""
     assert p["allowed_mentions"] == {"parse": []}
-    assert p["embeds"][0]["title"] == "Resonance spawned!"
+    assert p["embeds"][0]["title"].endswith("Resonance spawned!")
     assert p["embeds"][0]["image"] == {"url": "attachment://picture.png"}
+
+
+def test_rarity_tiers_and_collected_alerts():
+    assert D.tier(250_000)[2] == "Rare" and D.tier(1_000_000)[2] == "Epic"
+    assert D.tier(10_000_000)[2] == "Legendary" and D.tier(500_000_000)[2] == "Mythic"
+    assert D.tier(3_000_000_000)[2] == "Godly" and D.tier(None)[2] == "Rare"
+    e = D.rare_message("Beyond", 10_000_000, "normal", "Overworld", "banner")
+    assert e["title"].startswith("\u2B50") and e["color"] == D.tier(10_000_000)[1]
+    c = D.collected_message("Evergreen", 1_000_000, "inverted", "pickup", run_no=2)
+    assert c["title"].endswith("Collected Inverted Evergreen!") and "worker" in c["description"]
+    f = {x["name"]: x["value"] for x in c["fields"]}
+    assert f == {"Rarity": "**1 in 1,000,000**", "Tier": "\U0001F52E Epic", "Variant": "\u26AA Inverted"}

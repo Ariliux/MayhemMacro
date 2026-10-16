@@ -212,9 +212,9 @@ def test_rare_alert_content_and_switches():
     s = settings()
     [a] = M.alerts_for(rare(), s, LIVE)
     assert a.group == "rare" and a.priority == D.PRI_NORMAL
-    assert a.embed["title"] == "Resonance spawned!"
+    assert a.embed["title"].endswith("Resonance spawned!")
     fields = {f["name"]: f["value"] for f in a.embed["fields"]}
-    assert fields == {"Rarity": "1 in 100,000", "World": "Dreamland"}
+    assert fields == {"Rarity": "**1 in 100,000**", "Tier": "\U0001F48E Rare", "World": "Dreamland"}
     assert a.embed["footer"]["text"].endswith("run #7")
     assert a.mention is None                               # 1/100,000 < @ me floor
     assert a.picture is None
@@ -236,13 +236,13 @@ def test_rare_ping_needs_rarity_tick_and_id():
 
 def test_rare_variants_and_log_sources():
     inv = M.alerts_for(rare(den=5_000, variant="inverted", block="Relic"), settings(), LIVE)
-    assert inv[0].embed["title"] == "Inverted Relic spawned!"
+    assert inv[0].embed["title"].endswith("Inverted Relic spawned!")
     assert M.alerts_for(rare(den=5_000, variant="inverted", block="Relic"),
                         settings(alert_variants_always=False), LIVE) == []
     song = M.alerts_for(rare(den=None, source="log_song", block="snakeblock"), settings(), LIVE)
-    assert song[0].embed["title"] == "SNAKEBLOCK appeared!"
+    assert song[0].embed["title"].endswith("\U0001F48E SNAKEBLOCK appeared!")
     late = M.alerts_for(rare(den=None, source="log_chromatic", block="vexen"), settings(), LIVE)
-    assert late[0].embed["title"] == "A Chromatic Vexen was on your server"
+    assert late[0].embed["title"].endswith("A Chromatic Vexen was on your server")
     unnamed = M.alerts_for(rare(den=None, source="log_chromatic", block="nil"), settings(), LIVE)
     assert "nil" not in json.dumps(unnamed[0].embed).lower()
 
@@ -877,7 +877,7 @@ def test_real_engine_run_reads_right_in_the_app(stats_file):
     assert states[0] == ("Starting", "Looking for Block Mayhem X…", "GREEN")
     assert ("Running", "In Block Mayhem X.", "GREEN") in states
     sent = [e["embed"]["title"] for e, _ in FakeSender.made[0].events]
-    assert {"Storage is full", "SNAKEBLOCK appeared!", "Rejoining your server",
+    assert {"Storage is full", "\U0001F48E SNAKEBLOCK appeared!", "Rejoining your server",
             "Back in Block Mayhem X"} <= set(sent)
     assert all(p.log == [] for ev, p in plans if ev["type"] != "log")
 

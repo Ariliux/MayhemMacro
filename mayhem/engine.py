@@ -248,6 +248,7 @@ class _Vote:
     clicked_at: float = 0.0
     before: int | None = None       # the chosen card's vote count at the first click
     busy_noted: bool = False
+    img: Any = None                 # the vote screen, kept for a bug picture if the vote fails
 
 
 @dataclass
@@ -722,7 +723,9 @@ class Engine:
             self._log("info", f"{shown} spawned{odds}.")
             return
 
-        if picture is not None:
+        # A picture only for blocks at or above your own rarity setting (not for
+        # 'always alert' variants under it, or blocks with no known odds).
+        if picture is not None and denom is not None and denom >= _int(st, "rare_min", 0):
             self._picture(picture, "rare")
         ping = denom is not None and denom >= _int(st, "rare_ping_min", 0)
         self._emit({"type": "rare", "block": name, "denominator": denom, "variant": variant,
@@ -1061,7 +1064,7 @@ class Engine:
             if not v.seen:
                 v.seen = True
                 v.options = [o.name for o in opts]
-                self._picture(img, "vote")
+                v.img = img                     # pictures only if something goes wrong
                 self._log("info", "Vote screen: " + ", ".join(v.options) + ".")
             pick = vote.choose(opts, _ranking(st))
             v.chose = pick.name
@@ -1143,11 +1146,15 @@ class Engine:
             self._voted = (now, v.chose or "")
             self._log("info", f"Voted for {v.chose}.")
             if how == "unchanged":
+                if v.img is not None:
+                    self._picture(v.img, "vote_problem")
                 self._log("warn", f"Clicked {v.chose} twice but its vote count didn't go up, "
                                   "so the vote may not have counted.")
         elif v.busy_noted:
             self._log("info", "Didn't vote this time: you were using the PC.")
         else:
+            if v.img is not None:
+                self._picture(v.img, "vote_problem")
             self._log("warn", "Couldn't click the vote this time.")
 
     def _picture(self, img: Image.Image, tag: str) -> None:

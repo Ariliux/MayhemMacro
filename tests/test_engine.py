@@ -1262,7 +1262,7 @@ def test_vote_clicks_the_highest_ranked_option_in_screen_pixels():
     assert r.inputs.clicks() == [("click", 1580, 588)]
     assert r.of("vote") == [{"type": "vote", "options": ["Void", "Ocean", "Lava"],
                              "chose": "Lava", "ok": True}]
-    assert [tag for _, tag in r.pictures] == ["vote"]
+    assert r.pictures == []                           # a vote that worked: no picture
     assert "Voted for Lava." in r.logs("info")
     assert r.engine._busy is None
 
@@ -1406,7 +1406,7 @@ def test_one_vote_search_per_vote():
     r = Rig().start()
     VoteScreen(r, ("Void", "Ocean"), in_secs=8, last=60)    # stays up a long time
     r.run(80)
-    assert len(r.of("vote")) == 1 and len(r.pictures) == 1
+    assert len(r.of("vote")) == 1 and r.pictures == []
 
 
 def test_world_change_after_a_vote_mentions_the_vote():
@@ -1834,3 +1834,12 @@ def test_anti_afk_variety_mixes_jumps_double_jumps_and_clicks():
     for _, x, y in r.inputs.clicks():                    # always inside the Roblox picture
         rx, ry, rw, rh = r.window.client_rect(r.window.hwnd)
         assert rx < x < rx + rw and ry < y < ry + rh
+
+
+def test_pictures_only_for_rares_at_your_setting_and_problems():
+    r = Rig(rare_min=1_000_000).start()
+    r.ocr.script["banner"] = ["Inverted Relic has spawned! (1 / 6,000,000)"]
+    r.tick()
+    r.ocr.script["banner"] = ["Chromatic Opal has spawned! (1 / 250,000)"]   # alerts (variant) but under 1M
+    r.run(40)
+    assert [tag for _, tag in r.pictures] == ["rare"]

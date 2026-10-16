@@ -534,9 +534,13 @@ class RunCtx:
     counts: dict = field(default_factory=dict)
     lifetime: float = 0.0           # stats total_secs
     narrated: bool = False          # a storage / rejoin / vote event came just now
+    rarest: tuple | None = None     # (name, 1-in-N) of the rarest block this run
 
     def count_fields(self) -> dict:
-        return {TILE_NAMES[k]: int(self.counts.get(k, 0)) for k in TILE_KEYS}
+        out = {TILE_NAMES[k]: int(self.counts.get(k, 0)) for k in TILE_KEYS}
+        if self.rarest:
+            out["Rarest"] = f"{self.rarest[0]} (1 in {self.rarest[1]:,})"
+        return out
 
 
 @dataclass
@@ -618,6 +622,15 @@ def alerts_for(ev: dict, settings: dict, ctx: RunCtx) -> list[Alert]:
                                    world if isinstance(world, str) else None,
                                    str(ev.get("source") or "banner"), run_no=ctx.run_no),
             ping=rare_wants_ping(den, ev.get("ping"), settings), picture=picture)
+    elif kind == "collected":
+        if settings.get("rare_alerts", True) is not True:
+            return []
+        den, variant = _int_or_none(ev.get("denominator")), _variant_of(ev)
+        if den is None or not rare_passes(den, variant, settings):
+            return []                       # a collect with no known rarity: no ping-worthy news
+        add("rare", D.collected_message(block_label(ev.get("block")), den, variant,
+                                        str(ev.get("how") or "chat"), run_no=ctx.run_no),
+            ping=rare_wants_ping(den, None, settings))
     elif kind == "rejoin":
         phase = ev.get("phase")
         tries = _int_or_none(ev.get("try")) or 1
@@ -908,7 +921,8 @@ class Session:
                       ran=max(0.0, now - self.started) if self.started else 0.0,
                       counts=dict(self.counts),
                       lifetime=float(self.stats.get("total_secs", 0)),
-                      narrated=0.0 <= now - self._narrated_at <= self.NARRATED_GAP)
+                      narrated=0.0 <= now - self._narrated_at <= self.NARRATED_GAP,
+                      rarest=getattr(self, "rarest", None))
 
     @staticmethod
     def _narrates(ev: dict) -> bool:
@@ -935,6 +949,7 @@ class Session:
         self.started = now
         self.counts = dict.fromkeys(TILE_KEYS, 0)
         self.world = None
+        self.rarest = None
         self.end_reason, self.end_detail = "stopped", ""
         self.last_error = None
         self.hour_sent = 0
@@ -959,6 +974,10 @@ class Session:
                     pass
         if plan.world:
             self.world = plan.world
+        for found in (plan.rare, plan.found):
+            den = (found or {}).get("den")
+            if den and (getattr(self, "rarest", None) is None or den > self.rarest[1]):
+                self.rarest = (found["name"], den)
         if plan.end and self.live:
             self.end_reason, self.end_detail = plan.end
         if plan.error:

@@ -44,6 +44,30 @@ HOOK_COLOURS = {"rare": HOOK_RARE, "chromatic": HOOK_CHROMATIC,
                 "rejoin_fail": HOOK_AMBER, "storage": HOOK_AMBER,
                 "stop": HOOK_MUTED, "closed": HOOK_MUTED,
                 "error": HOOK_RED, "stuck": HOOK_RED}
+# The webhook's picture: the app icon, from the public repo (no user data).
+AVATAR_URL = "https://raw.githubusercontent.com/Ariliux/MayhemMacro/main/docs/icon.png"
+
+# Rarity tiers for rare-block alerts: (at least 1 in N, emoji, colour, name).
+TIERS = ((1_000_000_000, "\U0001F308", 0xF472B6, "Godly"),
+         (100_000_000, "\U0001F525", 0xEF4444, "Mythic"),
+         (10_000_000, "\u2B50", 0xF5A524, "Legendary"),
+         (1_000_000, "\U0001F52E", 0xA855F7, "Epic"),
+         (0, "\U0001F48E", 0x38BDF8, "Rare"))
+VARIANT_TAG = {"inverted": "\u26AA Inverted", "chromatic": "\U0001F308 Chromatic"}
+
+
+def tier(denominator) -> tuple[str, int, str]:
+    """(emoji, colour, name) for a rarity; unknown rarity counts as Rare."""
+    try:
+        n = int(denominator or 0)
+    except (TypeError, ValueError):
+        n = 0
+    for floor, emoji, colour, name in TIERS:
+        if n >= floor:
+            return emoji, colour, name
+    return TIERS[-1][1:]
+
+
 # when the queue is full the least important go first
 PRI_PERIODIC, PRI_MILESTONE, PRI_NORMAL = 0, 1, 2
 
@@ -131,7 +155,7 @@ def build_payload(embeds, mention_ids=()) -> dict:
     allowed: dict = {"parse": []}
     if ids:
         allowed["users"] = ids
-    return {"username": APP_NAME,
+    return {"username": APP_NAME, "avatar_url": AVATAR_URL,
             "content": " ".join(f"<@{i}>" for i in ids),
             "allowed_mentions": allowed,
             "embeds": list(embeds)}
@@ -616,7 +640,7 @@ def rare_message(block, denominator, variant="normal", world=None,
         variant = "chromatic"
     if variant in ("inverted", "chromatic") and not name.lower().startswith(variant):
         name = f"{variant.title()} {name}"
-    kind = variant if variant in ("inverted", "chromatic") else "rare"
+    emoji, colour, tier_name = tier(denominator)
     if source == "log_chromatic":
         article = "An" if name[:1].lower() in "aeiou" else "A"
         title = f"{article} {name} was on your server"
@@ -629,10 +653,30 @@ def rare_message(block, denominator, variant="normal", world=None,
         desc = "It's on your server right now."
     fields = []
     if _rarity(denominator):
-        fields.append(("Rarity", _rarity(denominator)))
+        fields.append(("Rarity", f"**{_rarity(denominator)}**"))
+    fields.append(("Tier", f"{emoji} {tier_name}"))
+    if variant in VARIANT_TAG:
+        fields.append(("Variant", VARIANT_TAG[variant]))
     if world:
         fields.append(("World", scrub(world)))
-    return build_embed(kind, title, desc, None, fields, footer_text(run_no))
+    return build_embed("rare", f"{emoji} {title}", desc, colour, fields, footer_text(run_no))
+
+
+def collected_message(block, denominator, variant="normal", how="chat", *, run_no=None) -> dict:
+    """A rare block that was actually picked up: by you (chat) or a worker."""
+    name = _block_name(block)
+    variant = str(variant or "normal").lower()
+    if variant in ("inverted", "chromatic") and not name.lower().startswith(variant):
+        name = f"{variant.title()} {name}"
+    emoji, colour, tier_name = tier(denominator)
+    who = "A worker picked it up." if how == "pickup" else "It's in your inventory."
+    fields = []
+    if _rarity(denominator):
+        fields.append(("Rarity", f"**{_rarity(denominator)}**"))
+    fields.append(("Tier", f"{emoji} {tier_name}"))
+    if variant in VARIANT_TAG:
+        fields.append(("Variant", VARIANT_TAG[variant]))
+    return build_embed("rare", f"\u2705 Collected {name}!", who, colour, fields, footer_text(run_no))
 
 
 def run_message(kind: str, *, ran=None, counts=None, lifetime=None,
