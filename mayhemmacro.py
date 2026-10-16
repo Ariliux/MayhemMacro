@@ -5357,14 +5357,13 @@ def _colour(name: str) -> str:
 
 
 def main() -> None:
-    # Run from source, Windows groups the window under python and shows its
-    # icon; its own id keeps it apart (and apart from GlassMacro).
-    if not getattr(sys, "frozen", False):
-        try:
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                APP_USER_MODEL_ID)
-        except Exception:
-            pass
+    # Its own taskbar id: from source, Windows would group the window under
+    # python; as the app, it keeps the taskbar from showing an icon it cached
+    # for an older build of the same .exe (and keeps it apart from GlassMacro).
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    except Exception:
+        pass
     if not claim_single_instance():
         return
     rotate_log()
