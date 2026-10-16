@@ -1,0 +1,33 @@
+# Python and the test runner
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# build output
+build/
+dist/
+*.spec
+
+# Real Roblox logs and screenshots of the game: local only, never commit
+tests/fixtures/
+session_bar_preview.png
+
+# The app's own data, in case MAYHEM_DATA_DIR ever points inside the project:
+# settings.json holds the webhook, the private server link and the Discord id
+settings.json
+settings.corrupt-*.json
+stats.json
+stats.json.corrupt-*
+log.txt
+log.old.txt
+events/
+*.tmp
+*.bak*
+
+# local working notes
+REUSE_MAP.md
+GITHUB_DRAFTS.md
+
+# build log
+*.log

@@ -1,0 +1,31 @@
+# MayhemMacro runs from source on 64-bit Python 3.14 (Windows 10/11).
+#   py -3.14 -m venv .venv
+#   .venv\Scripts\python.exe -m pip install -r requirements.txt
+# These are the exact versions it was built and tested with.
+
+# the window
+customtkinter==5.2.2
+darkdetect==0.8.0                       # customtkinter needs these two
+packaging==26.3
+# the F1 / F2 keys
+keyboard==0.13.5
+# looking at the Roblox window, and the pictures it saves
+pillow==12.1.1
+# finding the pinned recipe's arrow
+numpy==2.4.3
+# Windows' own text reading (the spawn banner, the vote timer, the vote screen)
+winrt-runtime==3.2.1
+typing_extensions==4.16.0               # winrt-runtime needs it
+winrt-Windows.Foundation==3.2.1
+winrt-Windows.Foundation.Collections==3.2.1
+winrt-Windows.Globalization==3.2.1
+winrt-Windows.Graphics.Imaging==3.2.1
+winrt-Windows.Media.Ocr==3.2.1
+winrt-Windows.Storage.Streams==3.2.1
+
+# only for the tests (.venv\Scripts\python.exe -m pytest -q tests)
+pytest==8.4.2
+colorama==0.4.6
+iniconfig==2.3.1
+pluggy==1.6.0
+Pygments==2.21.0
