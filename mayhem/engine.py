@@ -63,6 +63,8 @@ LOG_HOLD = 3.0              # with the screen readable, give the banner this lon
 BANNER_PATIENCE = 3.0       # wait this long for a read of a banner that shows its rarity
 SETUP_IDLE = 1.5            # start-of-run setup waits this long after your last input (the F1 press)
 PLAY_EVERY = 1.5            # look for the title screen's PLAY button this often while loading
+MEDAL_DELAY = 2.0           # press the clip key this long after the spawn (so the clip shows it)
+MEDAL_GAP = 20.0            # at most one clip this often
 CHAT_EVERY = 2.0            # read the chat for 'has collected' lines this often
 FIND_QUIET = 120.0          # the same find again only after it was gone this long
 BANNER_TEXT_QUIET = 600.0   # write an unknown banner text to the log at most this often
@@ -418,6 +420,7 @@ class Engine:
             return
         self._step("reading the screen", self._screen, now, st, look)
         self._step("getting the game ready", self._setup, now, st, look)
+        self._step("clipping with Medal", self._medal, now, st, look)
         self._step("doing the anti-AFK jump", self._anti_afk, now, st, look)
         self._step("sending a rare block alert", self._flush_log_rares, now, st, look)
         self._step("updating the HUD", self._send_hud, now)
@@ -427,6 +430,8 @@ class Engine:
     def _reset_run(self) -> None:
         """Fresh per-run state."""
         self._first = True
+        self._clip_at: float | None = None      # when to press the Medal clip key
+        self._clip_last = _NEVER
         self._play_at = _NEVER
         self._start_elsewhere = False           # Roblox was in another game at Start
         self._setup_done = False                # start-of-run setup (pinned recipe, cursor)
@@ -725,8 +730,11 @@ class Engine:
 
         # A picture only for blocks at or above your own rarity setting (not for
         # 'always alert' variants under it, or blocks with no known odds).
-        if picture is not None and denom is not None and denom >= _int(st, "rare_min", 0):
-            self._picture(picture, "rare")
+        if denom is not None and denom >= _int(st, "rare_min", 0):
+            if picture is not None:
+                self._picture(picture, "rare")
+            if _flag(st, "medal_clip") and self._clip_at is None:
+                self._clip_at = now + MEDAL_DELAY
         ping = denom is not None and denom >= _int(st, "rare_ping_min", 0)
         self._emit({"type": "rare", "block": name, "denominator": denom, "variant": variant,
                     "source": source, "ping": ping, "picture": picture, "world": self.world})
@@ -1175,6 +1183,25 @@ class Engine:
 
     def _no_idle_lines(self, now: float) -> bool:
         return self._idle is None or now - self._idle.at > IDLE_FRESH
+
+    # -- Medal clips ----------------------------------------------------------------
+    def _medal(self, now: float, st: dict, look: _Look) -> None:
+        """Press the user's Medal clip key a moment after a rare spawn. Only with
+        Roblox in front and the user away from the keys; gives up after 15 s."""
+        due = self._clip_at
+        if due is None or now < due:
+            return
+        if now - self._clip_last < MEDAL_GAP or now - due > 15:
+            self._clip_at = None
+            return
+        if not look.readable or self._busy is not None or not self._input_ok(look):
+            return
+        press = getattr(self.deps.inputs, "press_keys", None)
+        key = str(st.get("medal_key") or "F4")
+        self._clip_at = None
+        if press is not None and press(key):
+            self._clip_last = now
+            self._log("info", f"Clipped it with Medal ({key}).")
 
     # -- start-of-run setup -------------------------------------------------------
     def _setup(self, now: float, st: dict, look: _Look) -> None:

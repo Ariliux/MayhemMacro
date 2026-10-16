@@ -240,6 +240,58 @@ def _hold(scan: int, hold: float) -> bool:
     return True
 
 
+# Keys for a clip hotkey (Medal etc.), by name: 'F4', 'Ctrl+F9', 'Alt+K'.
+_MODS = {"CTRL": 0x11, "CONTROL": 0x11, "ALT": 0x12, "SHIFT": 0x10}
+
+
+def parse_keys(text) -> list[int] | None:
+    """'Ctrl+F4' -> [VK_CONTROL, VK_F4]. None unless it is modifiers plus
+    exactly one F1-F24 / letter / digit key."""
+    parts = [p.strip().upper() for p in str(text or "").replace(" ", "").split("+") if p.strip()]
+    if not parts:
+        return None
+    mods, key = parts[:-1], parts[-1]
+    if any(m not in _MODS for m in mods):
+        return None
+    if key.startswith("F") and key[1:].isdigit() and 1 <= int(key[1:]) <= 24:
+        vk = 0x70 + int(key[1:]) - 1
+    elif len(key) == 1 and (key.isalpha() or key.isdigit()):
+        vk = ord(key)
+    else:
+        return None
+    return [_MODS[m] for m in mods] + [vk]
+
+
+def _vk_key(vk: int, up: bool) -> INPUT:
+    """A key event that carries the virtual-key code (hotkey listeners like
+    Medal watch for that), plus its scan code."""
+    scan = _user32.MapVirtualKeyW(int(vk), 0) & 0xFFFF
+    return INPUT(type=INPUT_KEYBOARD,
+                 u=_UNION(ki=KEYBDINPUT(wVk=int(vk), wScan=scan,
+                                        dwFlags=KEYEVENTF_KEYUP if up else 0,
+                                        time=0, dwExtraInfo=None)))
+
+
+def press_keys(text, hold: float = 0.08) -> bool:
+    """Press a hotkey like 'F4' or 'Ctrl+F4' (for Medal's clip). Only with
+    Roblox in front; every key always comes back up."""
+    safety.guard("SendInput")
+    vks = parse_keys(text)
+    if not vks or not _roblox_front():
+        return False
+    down: list[int] = []
+    try:
+        for vk in vks:
+            if not _send(_vk_key(vk, up=False)):
+                return False
+            down.append(vk)
+        time.sleep(min(max(0.0, float(hold)), MAX_HOLD))
+    finally:
+        for vk in reversed(down):
+            _send(_vk_key(vk, up=True))
+    return True
+
+
 # ---------------------------------------------------------------- public ---
 def press_space(hold: float = SPACE_HOLD) -> bool:
     """Jump: Space by scan code (0x39), held `hold` seconds. False if nothing

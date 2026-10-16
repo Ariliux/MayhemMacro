@@ -1843,3 +1843,19 @@ def test_pictures_only_for_rares_at_your_setting_and_problems():
     r.ocr.script["banner"] = ["Chromatic Opal has spawned! (1 / 250,000)"]   # alerts (variant) but under 1M
     r.run(40)
     assert [tag for _, tag in r.pictures] == ["rare"]
+
+
+def test_medal_clip_after_a_rare_spawn_at_your_setting():
+    from mayhem import inputs as I
+    assert I.parse_keys("F4") == [0x73] and I.parse_keys("ctrl+f9") == [0x11, 0x78]
+    assert I.parse_keys("Win+F4") is None and I.parse_keys("") is None and I.parse_keys("F25") is None
+    r = Rig(medal_clip=True, medal_key="F4", rare_min=1_000_000).start()
+    pressed = []
+    r.inputs.press_keys = lambda key: pressed.append(key) or True
+    r.ocr.script["banner"] = ["Opal has spawned! (1 / 10,000)"]          # under your setting: no clip
+    r.run(5)
+    assert pressed == []
+    r.ocr.script["banner"] = ["Inverted Relic has spawned! (1 / 6,000,000)"]
+    r.run(5)
+    assert pressed == ["F4"]
+    assert any("Medal" in t for t in r.logs("info"))

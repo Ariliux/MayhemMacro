@@ -116,6 +116,8 @@ EXPECTED_DEFAULTS = {
     "center_cursor": True,
     "start_jump": True,
     "attach_picture": False,
+    "medal_clip": False,
+    "medal_key": "F4",
     "keep_awake": True,
     "discord": {"enabled": False, "webhook": "", "user_id": "",
                 "send": {"rare": True, "run": True, "rejoin": True, "storage": True,

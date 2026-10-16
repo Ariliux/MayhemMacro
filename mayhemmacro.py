@@ -3195,6 +3195,25 @@ class MayhemMacro(ctk.CTk):
             "Only a picture of the Roblox window, and only to your own Discord.",
             on=s.get("attach_picture") is True,
             command=lambda: self._switch_saved("attach_picture", self.sw_picture))
+        self.sw_medal = self._switch_row(
+            card, "Clip rare blocks with Medal",
+            "Presses your Medal clip key a moment after a rare block at your rarity "
+            "spawns. Only while Roblox is in front and you're away from the keys.",
+            on=s.get("medal_clip") is True,
+            command=lambda: self._switch_saved("medal_clip", self.sw_medal))
+        self._hairline(card)
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=14, pady=10)
+        ctk.CTkLabel(row, text="Medal clip key", font=self.F(13), text_color=TEXT,
+                     anchor="w").pack(side="left")
+        self.lbl_medal = ctk.CTkLabel(row, text="Like F4 or Ctrl+F4", font=self.F(11),
+                                      text_color=MUTED, anchor="e")
+        self.ent_medal = ctk.CTkEntry(row, width=110, font=self.F(13), justify="center")
+        self.ent_medal.insert(0, str(s.get("medal_key") or "F4"))
+        self.ent_medal.pack(side="right")
+        self.lbl_medal.pack(side="right", padx=10)
+        self.ent_medal.bind("<FocusOut>", lambda e: self._medal_key_saved())
+        self.ent_medal.bind("<Return>", lambda e: self._medal_key_saved())
 
         self._group(sp, "RARE SPAWNS THIS SESSION")
         self.rare_card = self._card(sp, corner_radius=14)
@@ -3963,6 +3982,19 @@ class MayhemMacro(ctk.CTk):
         threading.Thread(target=run, daemon=True,
                          name=f"{APP_NAME} send test").start()
 
+    def _medal_key_saved(self):
+        from mayhem import inputs as I
+        text = self.ent_medal.get().strip()
+        if I.parse_keys(text) is None:
+            self.lbl_medal.configure(text="Use F1-F24, a letter or a number (Ctrl/Alt/Shift+ ok)",
+                                     text_color=RED)
+            return
+        key = "+".join(p.strip().title() if len(p.strip()) > 1 and not p.strip()[1:].isdigit()
+                       else p.strip().upper() for p in text.split("+"))
+        self.settings["medal_key"] = key
+        self._changed()
+        self.lbl_medal.configure(text="Saved", text_color=GREEN)
+
     def _hook_tested(self, status):
         text, colour = {
             "ok": ("Sent · check the channel.", GREEN),
@@ -3971,6 +4003,9 @@ class MayhemMacro(ctk.CTk):
             "dead": ("Discord says this link doesn't work. Copy it again.",
                      RED),
         }.get(status, ("Couldn't reach Discord. Try again in a bit.", AMBER))
+        if status == "ok" and not (self.settings.get("discord") or {}).get("enabled"):
+            text, colour = ("Sent · but alerts are still OFF. Turn on 'Send alerts to "
+                            "Discord' above to get them during runs."), AMBER
         self.lbl_hook_test.configure(text=text, text_color=colour)
         self._toast(text, {GREEN: "ok", RED: "err", AMBER: "warn"}.get(
             colour, "info"))
@@ -5610,6 +5645,11 @@ class MayhemMacro(ctk.CTk):
         self._status("RUNNING", GREEN)
         self.set_state("Starting", "Looking for Block Mayhem X…", GREEN)
         self.log("started - F2 stops it")
+        hook = self.settings.get("discord") or {}
+        if hook.get("webhook") and not hook.get("enabled"):
+            self.log("Discord alerts are off, so nothing will be posted this run. Turn on "
+                     "'Send alerts to Discord' on the Discord page.", "warn")
+            self._toast("Discord alerts are off · turn them on on the Discord page", "warn")
         try:
             eng.start()
         except Exception as exc:

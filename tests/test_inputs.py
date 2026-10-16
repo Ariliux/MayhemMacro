@@ -114,7 +114,10 @@ def unguarded(sandbox, monkeypatch):
 def _public_functions() -> dict:
     return {n: f for n, f in vars(inputs).items()
             if inspect.isfunction(f) and f.__module__ == inputs.__name__
-            and not n.startswith("_")}
+            and not n.startswith("_") and n not in PURE}
+
+
+PURE = {"parse_keys"}       # reads text only, never sends anything
 
 
 def _dummy_call(fn):
@@ -141,10 +144,10 @@ def test_own_user32_handle_not_the_shared_one():
 
 # ----------------------------------------------------------------- guard ---
 def test_public_functions_are_the_contract():
-    assert set(_public_functions()) == {"press_space", "tap_scan", "move_to", "click_at"}
+    assert set(_public_functions()) == {"press_space", "tap_scan", "move_to", "click_at", "press_keys"}
 
 
-@pytest.mark.parametrize("name", ["press_space", "tap_scan", "move_to", "click_at"])
+@pytest.mark.parametrize("name", ["press_space", "tap_scan", "move_to", "click_at", "press_keys"])
 def test_every_public_function_is_blocked_while_testing(sandbox, name):
     fn = _public_functions()[name]
     with pytest.raises(SideEffectBlocked):
@@ -168,7 +171,7 @@ def test_guard_names_sendinput(sandbox, monkeypatch):
     for fn in _public_functions().values():
         with pytest.raises(SideEffectBlocked):
             _dummy_call(fn)
-    assert seen == ["SendInput"] * 4
+    assert seen == ["SendInput"] * 5
     assert sandbox.user32.calls == []
 
 
