@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/icon.png" width="96" alt="MayhemMacro icon">
+</p>
+
 <h1 align="center">MayhemMacro</h1>
 
 <p align="center">An AFK helper for the Roblox game <b>Block Mayhem X</b>.</p>
