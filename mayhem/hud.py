@@ -323,6 +323,13 @@ def read_chat(ocr: Ocr, client: Image.Image) -> tuple[list[str], list[Find]]:
     return lines, parse_collects(lines)
 
 
+def esc_menu_open(ocr: Ocr, client: Image.Image) -> bool:
+    """Roblox's own Esc menu is over the game: its 'Resume' button together
+    with 'Leave' or 'Reset'. Words the game itself never shows together."""
+    text = " ".join(texts(ocr.read(client, 1.0))).lower()
+    return "resume" in text and ("leave" in text or "reset" in text or "respawn" in text)
+
+
 def find_play(ocr: Ocr, client: Image.Image) -> tuple[int, int] | None:
     """The title screen's PLAY button: a line that says just 'Play' (never
     quest text like 'Play for 30 Minutes!'). Client pixels of its centre."""

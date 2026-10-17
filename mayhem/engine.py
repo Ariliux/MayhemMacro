@@ -65,6 +65,11 @@ SETUP_IDLE = 1.5            # start-of-run setup waits this long after your last
 PLAY_EVERY = 1.5            # look for the title screen's PLAY button this often while loading
 MEDAL_DELAY = 2.0           # press the clip key this long after the spawn (so the clip shows it)
 MEDAL_GAP = 20.0            # at most one clip this often
+ESC_CHECK_EVERY = 3.0       # look for Roblox's Esc menu this often...
+ESC_HUD_LOST = 6.0          # ...once the game's top bar has been hidden this long
+ESC_ANYWAY = 20.0           # and this often even when the top bar still reads (dim menu overlay)
+ESC_GAP = 4.0               # at most one Esc press this often
+SCAN_ESC = 0x01
 CHAT_EVERY = 2.0            # read the chat for 'has collected' lines this often
 FIND_QUIET = 120.0          # the same find again only after it was gone this long
 BANNER_TEXT_QUIET = 600.0   # write an unknown banner text to the log at most this often
@@ -441,6 +446,7 @@ class Engine:
         self._step("reading the screen", self._screen, now, st, look)
         self._step("getting the game ready", self._setup, now, st, look)
         self._step("clipping with Medal", self._medal, now, st, look)
+        self._step("closing the Roblox menu", self._esc_menu, now, st, look)
         self._step("doing the anti-AFK jump", self._anti_afk, now, st, look)
         self._step("sending a rare block alert", self._flush_log_rares, now, st, look)
         self._step("updating the HUD", self._send_hud, now)
@@ -450,6 +456,7 @@ class Engine:
     def _reset_run(self) -> None:
         """Fresh per-run state."""
         self._first = True
+        self._esc_at = self._esc_pressed_at = _NEVER
         self._clip_at: float | None = None      # when to press the Medal clip key
         self._clip_last = _NEVER
         self._play_at = _NEVER
@@ -753,7 +760,8 @@ class Engine:
         if denom is not None and denom >= _int(st, "rare_min", 0):
             if picture is not None:
                 self._picture(picture, "rare")
-            if _flag(st, "medal_clip") and self._clip_at is None:
+            if (_flag(st, "medal_clip") and self._clip_at is None
+                    and denom >= _int(st, "medal_min", 1)):   # its own, higher bar (10M by default)
                 self._clip_at = now + MEDAL_DELAY
         ping = denom is not None and denom >= _int(st, "rare_ping_min", 0)
         self._emit({"type": "rare", "block": name, "denominator": denom, "variant": variant,
@@ -1211,6 +1219,40 @@ class Engine:
 
     def _no_idle_lines(self, now: float) -> bool:
         return self._idle is None or now - self._idle.at > IDLE_FRESH
+
+    # -- Roblox's Esc menu ---------------------------------------------------------
+    def _esc_menu(self, now: float, st: dict, look: _Look) -> None:
+        """Left open, Roblox's Esc menu hides every banner (a 1B went unseen
+        like that). When the game's top bar has been gone a while, check for
+        the menu and press Esc - only with the user away from the keys."""
+        if not _flag(st, "close_esc_menu") or not look.readable:
+            return
+        if self._busy is not None or self._rj is not None or self._vote is not None:
+            return
+        hud_hidden = now - self._timer_at >= ESC_HUD_LOST
+        if now - self._esc_at < (ESC_CHECK_EVERY if hud_hidden else ESC_ANYWAY):
+            return
+        self._esc_at = now
+        w = self.deps.window
+        rect = w.client_rect(look.hwnd)
+        if not rect:
+            return
+        try:
+            img = w.grab(rect)
+        except OSError:
+            return
+        if not hud.esc_menu_open(self.deps.ocr, img):
+            return
+        if not self._input_ok(look) or now - self._esc_pressed_at < ESC_GAP:
+            return
+        self._busy = "esc"
+        try:
+            ok = bool(self.deps.inputs.tap_scan(SCAN_ESC))
+        finally:
+            self._busy = None
+        if ok:
+            self._esc_pressed_at = now
+            self._log("info", "Closed the Roblox menu (Esc) so the macro can see the game.")
 
     # -- Medal clips ----------------------------------------------------------------
     def _medal(self, now: float, st: dict, look: _Look) -> None:

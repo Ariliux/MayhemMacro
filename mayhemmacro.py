@@ -3201,6 +3201,12 @@ class MayhemMacro(ctk.CTk):
             "spawns. Only while Roblox is in front and you're away from the keys.",
             on=s.get("medal_clip") is True,
             command=lambda: self._switch_saved("medal_clip", self.sw_medal))
+        clip_min = int(s.get("medal_min") or 10_000_000)
+        self.opt_medal = self._option_row(
+            card, "Clip blocks rarer than",
+            "Only these get a Medal clip (alerts still follow the setting above).",
+            [rarity_text(v) + "+" for v in sorted(set(BAR_RARE_STEPS) | {clip_min})],
+            rarity_text(clip_min) + "+", self._medal_min_picked)
         self._hairline(card)
         row = ctk.CTkFrame(card, fg_color="transparent")
         row.pack(fill="x", padx=14, pady=10)
@@ -4558,6 +4564,12 @@ class MayhemMacro(ctk.CTk):
             "Moves your mouse to the exact middle of the screen.",
             on=s.get("center_cursor", True) is True,
             command=lambda: self._flag_switched("center_cursor", self.sw_center))
+        self.sw_esc = self._switch_row(
+            card, "Close the Roblox menu",
+            "If the Esc menu is left open (it hides the rare banners), presses Esc to "
+            "close it. Only when you're away from the keys.",
+            on=s.get("close_esc_menu", True) is True,
+            command=lambda: self._flag_switched("close_esc_menu", self.sw_esc))
         self.sw_pics = self._switch_row(
             card, "Save pictures",
             "Saves a picture of rare blocks at your rarity and of problems to the data "
@@ -4640,6 +4652,12 @@ class MayhemMacro(ctk.CTk):
     def _ontop_switched(self):
         if bool(self.sw_ontop.get()) != bool(self._ui_set("pin")):
             self._toggle_pin()
+
+    def _medal_min_picked(self, value):
+        n = rarity_from_text(str(value).rstrip("+"))
+        if n:
+            self.settings["medal_min"] = n
+            self._changed()
 
     def _bar_rare_picked(self, value):
         n = rarity_from_text(str(value).rstrip("+"))

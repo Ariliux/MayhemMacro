@@ -42,6 +42,8 @@ DEFAULT_SETTINGS: dict = {
     "save_pictures": False,
     "medal_clip": False,
     "medal_key": "F4",
+    "medal_min": 10000000,
+    "close_esc_menu": True,
     "keep_awake": True,
     "discord": {"enabled": False, "webhook": "", "user_id": "",
                 "send": {"rare": True, "run": True, "rejoin": True, "storage": True,

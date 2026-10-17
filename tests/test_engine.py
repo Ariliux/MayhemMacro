@@ -207,6 +207,11 @@ class FakeInputs:
             raise self.space_error
         return self.ok and self.window.fg          # like the real one: only into Roblox
 
+    def tap_scan(self, scan: int, hold: float = 0.03) -> bool:
+        self.calls.append(("scan", scan))
+        self.order.append("scan")
+        return self.ok and self.window.fg
+
     def click_at(self, x: int, y: int, settle: float = 0.05) -> bool:
         self.calls.append(("click", x, y))
         self.order.append("click")
@@ -318,6 +323,7 @@ class Rig:
         self.settings["open_pinned"] = False     # no start-of-run setup unless a test asks
         self.settings["center_cursor"] = False
         self.settings["start_jump"] = False
+        self.settings["close_esc_menu"] = False   # no Esc presses unless a test asks
         self.settings.update(settings)
         self.events: list[dict] = []
         self.deps = Deps(window=self.window, ocr=self.ocr, inputs=self.inputs,
@@ -1849,7 +1855,7 @@ def test_medal_clip_after_a_rare_spawn_at_your_setting():
     from mayhem import inputs as I
     assert I.parse_keys("F4") == [0x73] and I.parse_keys("ctrl+f9") == [0x11, 0x78]
     assert I.parse_keys("Win+F4") is None and I.parse_keys("") is None and I.parse_keys("F25") is None
-    r = Rig(medal_clip=True, medal_key="F4", rare_min=1_000_000).start()
+    r = Rig(medal_clip=True, medal_key="F4", rare_min=1_000_000, medal_min=1_000_000).start()
     pressed = []
     r.inputs.press_keys = lambda key: pressed.append(key) or True
     r.ocr.script["banner"] = ["Opal has spawned! (1 / 10,000)"]          # under your setting: no clip
@@ -1884,3 +1890,34 @@ def test_no_pictures_are_saved_unless_switched_on():
     r.ocr.script["banner"] = ["Inverted Relic has spawned! (1 / 6,000,000)"]
     r.run(5)
     assert r.of("rare") and r.pictures == []                 # alerted, nothing saved to files
+
+
+def test_medal_clips_only_at_its_own_bar():
+    r = Rig(medal_clip=True, rare_min=100_000).start()           # medal_min defaults to 10M
+    pressed = []
+    r.inputs.press_keys = lambda key: pressed.append(key) or True
+    r.ocr.script["banner"] = ["Inverted Relic has spawned! (1 / 6,000,000)"]   # alerts, but under 10M
+    r.run(5)
+    assert r.of("rare") and pressed == []
+    r.ocr.script["banner"] = ["Beyond has spawned! (1 / 10,000,000)"]
+    r.run(30)
+    assert pressed == ["F4"]
+
+
+def test_esc_menu_left_open_gets_closed_when_you_are_away():
+    r = Rig(close_esc_menu=True).start()
+    r.ocr.script["client"] = ["Resume", "Reset Character", "Leave"]   # the menu, no top bar
+    r.run(20)
+    escs = [c for c in r.inputs.calls if c[0] == "scan" and c[1] == 0x01] or \
+        [c for c in r.inputs.calls if c and 0x01 in c[1:2]]
+    assert escs, r.inputs.calls[:5]
+    assert any("Roblox menu" in t for t in r.logs("info"))
+
+
+def test_esc_menu_is_left_alone_while_you_play():
+    r = Rig(close_esc_menu=True).start()
+    r.ocr.script["client"] = ["Resume", "Reset Character", "Leave"]
+    for _ in range(20):
+        r.clock.touch()
+        r.tick()
+    assert ("scan", 0x01) not in r.inputs.calls
