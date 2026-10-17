@@ -8,28 +8,25 @@ import threading
 import pytest
 
 from mayhem import roller, safety
-from mayhem.roller import Gems, RollDeps, RollResult
+from mayhem.roller import RollDeps, RollResult
 
 SPOT = (1000, 600)
 
 
 class Game:
-    """The fake world: a clock, the cursor, the clicks and the gem counter.
+    """The fake world: a clock, the cursor and the clicks.
 
     A click takes CLICK_TIME of fake time (inputs.click_at needs about that).
-    `gems` is a list of what each gem read sees, used up one per read; the
-    last one repeats. `cursor_at` can move the cursor after a number of
+    `cursor_at` can move the cursor after a number of
     clicks, `fail_at` makes that click (1-based) not go through, and
     `stop_at` sets the stop event during that click.
     """
     CLICK_TIME = 0.22
 
-    def __init__(self, gems=None, cursor_at=None, fail_at=None, stop_at=None):
+    def __init__(self, cursor_at=None, fail_at=None, stop_at=None):
         self.t = 0.0
         self.pos = SPOT
         self.clicks: list[tuple[float, tuple[int, int]]] = []
-        self.gems = list(gems or [Gems(None)])
-        self.gem_reads = 0
         self.cursor_at = cursor_at or {}
         self.fail_at = fail_at
         self.stop_at = stop_at
@@ -57,12 +54,8 @@ class Game:
             self.pos = self.cursor_at[len(self.clicks)]
         return True
 
-    def read_gems(self):
-        self.gem_reads += 1
-        return self.gems.pop(0) if len(self.gems) > 1 else self.gems[0]
-
     def deps(self):
-        return RollDeps(click=self.click, cursor=self.cursor, read_gems=self.read_gems,
+        return RollDeps(click=self.click, cursor=self.cursor,
                         sleep=self.sleep, now=self.now)
 
     def roll(self, count):
@@ -77,7 +70,6 @@ def test_rolls_the_count_at_the_cursor(count):
     assert r == RollResult(count, "done")
     assert len(g.clicks) == count
     assert all(at == SPOT for _, at in g.clicks)
-    assert g.gem_reads == 0                     # only 'all' reads the gems
 
 
 def test_one_click_every_0_4_seconds():
@@ -103,7 +95,7 @@ def test_the_last_click_ends_it_without_waiting():
 
 
 def test_the_count_comes_from_the_setting():
-    assert Game().roll("all").why != "done"     # 'all' has no count
+    assert Game(stop_at=200).roll("all").why == "stopped"   # "all" has no count
     assert Game().roll("junk") == RollResult(10, "done")
     assert Game().roll(None) == RollResult(10, "done")
 
@@ -170,77 +162,19 @@ def test_a_click_that_failed_because_the_mouse_moved_says_so():
 
 
 # ------------------------------------------------------------------ all ---
-def K(v):
-    return Gems(v)
+def test_all_keeps_clicking_until_the_key_is_pressed_again():
+    assert Game(stop_at=500).roll("all") == RollResult(500, "stopped")
 
 
-def test_all_stops_when_the_gems_stop_going_down():
-    # 1.1K at the start, down every check, then stuck at 800 (out of gems)
-    g = Game(gems=[K(1100), K(1000), K(900), K(800), K(800), K(800), K(800)])
-    r = g.roll("all")
-    # checks after 3, 6, 9 clicks drop; after 12, 15, 18 they don't
-    assert r == RollResult(18, "gems")
-    assert r.line == "Stopped: out of gems after 18 rolls."
-    assert g.gem_reads == 7
-
-
-def test_all_keeps_going_while_the_gems_drop():
-    gems = [K(10_000 - 30 * i) for i in range(40)]
-    g = Game(gems=gems + [K(gems[-1].value)])
-    r = g.roll("all")
-    assert r.why == "gems" and r.rolls == 3 * (39 + roller.GEM_STALE_CHECKS)
-
-
-def test_a_roll_animation_that_holds_the_number_for_two_checks_is_fine():
-    g = Game(gems=[K(1100), K(1100), K(1100), K(1000), K(1000), K(1000), K(1000)])
-    r = g.roll("all")
-    assert r == RollResult(3 * 6, "gems")       # stopped at the 3rd flat check after 1000
-
-
-def test_all_stops_on_not_enough():
-    g = Game(gems=[K(1100), K(1000), Gems(1000, not_enough=True)])
-    r = g.roll("all")
-    assert r == RollResult(6, "gems")
-    assert r.line == "Stopped: out of gems after 6 rolls."
-
-
-def test_all_with_not_enough_already_showing_never_clicks():
-    g = Game(gems=[Gems(40, not_enough=True)])
-    r = g.roll("all")
-    assert r == RollResult(0, "gems") and g.clicks == []
-    assert r.line == "Didn't roll: you're out of gems."
-
-
-def test_all_that_can_never_read_the_gems_gives_up():
-    g = Game(gems=[Gems(None)])
-    r = g.roll("all")
-    assert r == RollResult(3 * roller.GEM_STALE_CHECKS, "blind")
-    assert r.line == "Stopped: couldn't read your gems after 9 rolls."
-
-
-def test_one_unreadable_read_is_not_the_end():
-    g = Game(gems=[K(1100), K(1000), Gems(None), K(900), K(800), K(800), K(800), K(800)])
-    r = g.roll("all")
-    assert r == RollResult(3 * 7, "gems")
-
-
-def test_a_misread_higher_number_is_no_drop():
-    g = Game(gems=[K(1100), K(11000), K(11000), K(11000)])
-    assert g.roll("all") == RollResult(9, "gems")
-
-
-def test_all_still_stops_for_the_key_the_mouse_and_roblox():
-    falling = [K(5000 - i) for i in range(100)]
-    assert Game(gems=falling, stop_at=7).roll("all") == RollResult(7, "stopped")
-    assert Game(gems=falling, fail_at=5).roll("all") == RollResult(4, "front")
-    assert Game(gems=falling, cursor_at={8: (0, 0)}).roll("all") == RollResult(8, "moved")
+def test_all_still_stops_for_the_mouse_and_roblox():
+    assert Game(fail_at=5).roll("all") == RollResult(4, "front")
+    assert Game(cursor_at={8: (0, 0)}).roll("all") == RollResult(8, "moved")
 
 
 # ----------------------------------------------------------------- lines ---
 @pytest.mark.parametrize("r, line", [
     (RollResult(25, "done"), "Rolled workers 25 times."),
     (RollResult(1, "done"), "Rolled workers 1 time."),
-    (RollResult(37, "gems"), "Stopped: out of gems after 37 rolls."),
     (RollResult(1, "stopped"), "Stopped rolling after 1 roll."),
     (RollResult(0, "front"), "Didn't roll: Roblox isn't in front."),
     (RollResult(0, "stopped"), "Didn't roll: stopped right away."),
@@ -315,5 +249,4 @@ def test_the_real_mouse_and_screen_are_refused_while_testing():
     assert safety.testing()
     with pytest.raises(safety.SideEffectBlocked):
         roller.real_deps()
-    assert roller._ocr == []                  # refused before anything was made
     roller.release()                          # nothing to free: fine

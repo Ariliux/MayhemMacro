@@ -64,7 +64,7 @@ DEFAULT_SETTINGS: dict = {
 SETTINGS_VERSION = 2
 
 # A number setting that may also be one of these words. roll_count is a
-# number of rolls or "all" (until out of gems).
+# number of rolls or "all" (until stopped).
 ALSO_WORDS = {"roll_count": ("all",)}
 ROLL_COUNT_MAX = 1000
 

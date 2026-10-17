@@ -4648,7 +4648,7 @@ class MayhemMacro(ctk.CTk):
         self.lbl_roll_howto.pack(fill="x")
         self._rewrap_on(txt, (self.lbl_roll_howto,))
         self.opt_roll = self._option_row(
-            card, "Rolls per press", "All keeps rolling until you're out of gems.",
+            card, "Rolls per press", "All keeps rolling until you press the key again.",
             roller.count_choices(s.get("roll_count")), roller.count_text(s.get("roll_count")),
             self._roll_count_picked)
         self._hairline(card)

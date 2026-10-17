@@ -1169,7 +1169,7 @@ def test_the_roll_thread_reports_one_line_through_the_ui_queue():
     from mayhem import roller
     clock, clicks = FakeTime(), []
     deps = roller.RollDeps(click=lambda x, y: clicks.append((x, y)) or True,
-                           cursor=lambda: (700, 500), read_gems=lambda: roller.Gems(None),
+                           cursor=lambda: (700, 500),
                            sleep=clock.sleep, now=clock.now)
     app = RollApp()
     stop = app._roll_stop = threading.Event()
@@ -1182,28 +1182,31 @@ def test_the_roll_thread_reports_one_line_through_the_ui_queue():
     assert app._roll_stop is None
 
 
-def test_an_out_of_gems_roll_and_a_broken_one():
+def test_an_all_roll_and_a_broken_one():
     import threading
     from mayhem import roller
-    clock = FakeTime()
-    gems = iter([1100, 1000, 900] + [900] * 10)
-    deps = roller.RollDeps(click=lambda x, y: True, cursor=lambda: (1, 1),
-                           read_gems=lambda: roller.Gems(next(gems)),
-                           sleep=clock.sleep, now=clock.now)
+    clock, n = FakeTime(), [0]
+    stop = threading.Event()
+
+    def click(x, y):
+        n[0] += 1
+        if n[0] == 40:
+            stop.set()                            # F8 again
+        return True
+    deps = roller.RollDeps(click=click, cursor=lambda: (1, 1), sleep=clock.sleep, now=clock.now)
     app = RollApp()
-    stop = app._roll_stop = threading.Event()
+    app._roll_stop = stop
     M.MayhemMacro._roll_worker(app, "all", deps, stop)
     app.run_queued()
-    assert app.logged == [("info", "Stopped: out of gems after 15 rolls.")]
+    assert app.logged == [("info", "Stopped rolling after 40 rolls.")]
     assert app.feed[-1][:3] == ("roll", "■", "SUBTLE")
 
     def broken(x, y):
         raise OSError("no mouse")
-    deps = roller.RollDeps(click=broken, cursor=lambda: (1, 1),
-                           read_gems=lambda: roller.Gems(None))
+    deps = roller.RollDeps(click=broken, cursor=lambda: (1, 1))
     later = threading.Event()
     app._roll_stop = later                        # a newer roll: not cleared by the old one
-    M.MayhemMacro._roll_worker(app, 5, deps, stop)
+    M.MayhemMacro._roll_worker(app, 5, deps, threading.Event())
     app.run_queued()
     assert app.logged[-1] == ("error", "Rolling stopped on an error: OSError: no mouse")
     assert app.feed[-1][1:3] == ("×", "RED")

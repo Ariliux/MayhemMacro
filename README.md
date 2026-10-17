@@ -37,7 +37,7 @@ something rare shows up.
 - **A session bar** on top of Roblox during a run: run time, the rarest block so far, rare
   count, your votes, rejoins and anti-AFK jumps.
 - **Rolls workers for you.** Open Workers in Roblox, hover the **Roll** button and press
-  **F8**: it clicks Roll 1, 5, 10, 25, 50 or 100 times, or until you're out of gems
+  **F8**: it clicks Roll 1, 5, 10, 25, 50 or 100 times, or nonstop until you press F8 again
   (Settings → Roll workers). Press F8 again or move the mouse to stop. Not during a run.
 - **Never gets in your way.** It only presses keys or clicks while Roblox is the window in
   front, and never while you're using your mouse or keyboard. Anything bigger (closing and
