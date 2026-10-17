@@ -122,6 +122,8 @@ EXPECTED_DEFAULTS = {
     "medal_min": 10000000,
     "close_esc_menu": True,
     "keep_awake": True,
+    "roll_key": "F8",
+    "roll_count": 10,
     "discord": {"enabled": False, "webhook": "", "user_id": "",
                 "send": {"rare": True, "run": True, "rejoin": True, "storage": True,
                          "error": True, "stuck": True, "hourly": False},
@@ -244,6 +246,27 @@ def test_vote_maps_are_cleaned(data):
 def test_vote_click_offset(data, raw, want):
     write(paths.settings_path(), json.dumps({"vote_click_offset": raw}))
     assert paths.load_settings()["vote_click_offset"] == want
+
+
+@pytest.mark.parametrize("raw, want", [
+    (25, 25), (1, 1), (100, 100), (30, 30), (1000, 1000), (25.0, 25),
+    ("all", "all"), ("All", "all"), (" ALL ", "all"),
+    (0, 10), (-5, 10), (1001, 10), (2.5, 10), (True, 10), ("10", 10), ("every", 10),
+    (None, 10), ([5], 10)])
+def test_roll_count_is_a_count_or_all(data, raw, want):
+    write(paths.settings_path(), json.dumps({"roll_count": raw}))
+    got = paths.load_settings()["roll_count"]
+    assert got == want and type(got) is type(want)
+
+
+def test_roll_key_is_kept_as_saved(data):
+    write(paths.settings_path(), json.dumps({"roll_key": "Ctrl+F9"}))
+    assert paths.load_settings()["roll_key"] == "Ctrl+F9"
+    write(paths.settings_path(), json.dumps({"roll_key": 8}))
+    assert paths.load_settings()["roll_key"] == "F8"
+    # the word 'all' is only allowed for roll_count
+    write(paths.settings_path(), json.dumps({"rare_min": "all"}))
+    assert paths.load_settings()["rare_min"] == 100000
 
 
 def test_notepad_bom_is_fine(data):

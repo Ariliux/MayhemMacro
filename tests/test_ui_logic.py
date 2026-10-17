@@ -725,12 +725,20 @@ class Closing(StandIn):
         self.running = False
         self._engine = None
         self._hotkey_handle = None
+        self._roll_stop = None
+        self._roll_hotkey = None
         self._win_save = self._save_job = None
         self.session_start = None
         self.destroyed = False
 
     def destroy(self):
         self.destroyed = True
+
+    def _halt_roll(self):
+        return M.MayhemMacro._halt_roll(self)
+
+    def _unregister_roll_key(self):
+        return M.MayhemMacro._unregister_roll_key(self)
 
 
 def test_closing_right_after_stop_still_sends_the_stop_alert(stats_file):
@@ -1020,3 +1028,211 @@ def test_session_bar_helpers():
     assert M.bar_rare_floor({"bar_rare_min": 50_000_000}) == 50_000_000
     assert M.bar_rare_floor({"bar_rare_min": "junk"}) == 10_000_000
     assert M.rarity_from_text(M.rarity_text(50_000_000) + "+".rstrip("+")) == 50_000_000
+
+
+# ------------------------------------------------------------ roll workers ---
+def test_roll_key_labels_and_clashes():
+    assert M.key_label(" ctrl + f8") == "Ctrl+F8"
+    assert M.key_label("control+alt+k") == "Ctrl+Alt+K"
+    assert M.key_label("f8") == "F8" and M.key_label("shift+5") == "Shift+5"
+    assert M.same_keys("Ctrl+Alt+F8", "alt+control+f8")
+    assert not M.same_keys("Ctrl+F8", "F8") and not M.same_keys("junk", "junk")
+    assert M.roll_key_problem("F8", "F4") is None
+    assert M.roll_key_problem("Ctrl+F1", "F4") is None
+    for bad in ("F1", "f2", " F1 "):
+        assert "F1 and F2" in M.roll_key_problem(bad, "F4")
+    assert "Medal" in M.roll_key_problem("f4", "F4")
+    assert "Medal" in M.roll_key_problem("Control+F9", "Ctrl+F9")
+    assert M.roll_key_problem("F8", "not a key") is None
+    for junk in ("", "F25", "Win+F8", "F8+F9", "Esc", None):
+        assert "Use F1-F24" in M.roll_key_problem(junk, "F4")
+    assert M.roll_howto("F8") == ("Open Workers in Roblox, hover the Roll button, press F8. "
+                                  "Press it again to stop.")
+    assert M.DEFAULT_ROLL_KEY == "F8" and "GlassMacro" in M.GLASS_KEY_HINT
+
+
+class RollApp:
+    """Just enough of the app for the roll key and the roll thread, without Tk."""
+    SHORTCUTS = M.MayhemMacro.SHORTCUTS
+    ROLL_SHORTCUT = M.MayhemMacro.ROLL_SHORTCUT
+
+    def __init__(self, running=False, **over):
+        from mayhem import roller
+        self.running = running
+        self.settings = copy.deepcopy(paths.DEFAULT_SETTINGS)
+        self.settings.update(over)
+        self._stopping = None
+        self._roll_stop = None
+        self._roll_hotkey = None
+        self._roll_gate = roller.PressGate()
+        self.queued, self.toasts, self.logged, self.feed = [], [], [], []
+
+    def _ui(self, fn):
+        self.queued.append(fn)
+
+    def run_queued(self):
+        while self.queued:
+            self.queued.pop(0)()
+
+    def _toast(self, text, kind="info", action=None):
+        self.toasts.append((text, kind))
+
+    def log(self, text, level="info"):
+        self.logged.append((level, text))
+
+    def _feed_add(self, key, glyph, colour, title, sub=""):
+        self.feed.append((key, glyph, colour, title))
+
+    def _toggle_roll(self):
+        return M.MayhemMacro._toggle_roll(self)
+
+    def _roll_worker(self, *a):
+        return M.MayhemMacro._roll_worker(self, *a)
+
+    def _roll_done(self, *a):
+        return M.MayhemMacro._roll_done(self, *a)
+
+    def _unregister_roll_key(self):
+        return M.MayhemMacro._unregister_roll_key(self)
+
+
+def test_rolling_is_refused_during_a_run():
+    app = RollApp(running=True)
+    M.MayhemMacro._toggle_roll(app)
+    assert app.toasts == [("Stop the run first (F2)", "warn")]
+    assert app._roll_stop is None
+
+
+def test_rolling_waits_for_a_run_that_is_still_stopping():
+    import threading
+    app = RollApp()
+    gate = threading.Event()
+    app._stopping = threading.Thread(target=gate.wait)
+    app._stopping.start()
+    try:
+        M.MayhemMacro._toggle_roll(app)
+    finally:
+        gate.set()
+        app._stopping.join()
+    assert app.toasts == [("Still stopping the last run · try again in a second", "info")]
+    assert app._roll_stop is None
+
+
+def test_rolling_never_starts_for_real_while_testing():
+    app = RollApp()
+    M.MayhemMacro._toggle_roll(app)
+    assert app.toasts == [("Rolling is off while testing", "info")]
+    assert app._roll_stop is None
+
+
+def test_the_key_again_stops_the_roll_at_once():
+    import threading
+    app = RollApp()
+    app._roll_stop = threading.Event()
+    M.MayhemMacro._toggle_roll(app)
+    assert app._roll_stop.is_set() and app.toasts == []
+    app._roll_stop = threading.Event()
+    M.MayhemMacro._halt_roll(app)                 # a run starting, the app closing
+    assert app._roll_stop.is_set()
+    M.MayhemMacro._halt_roll(RollApp())           # nothing rolling: fine
+
+
+def test_a_run_starting_stops_the_roll():
+    import inspect
+    assert "self._halt_roll()" in inspect.getsource(M.MayhemMacro.toggle_run)
+    assert "self._halt_roll()" in inspect.getsource(M.MayhemMacro._close)
+
+
+def test_holding_the_roll_key_is_one_toggle():
+    app = RollApp()
+    for _ in range(20):                           # key repeat while held
+        M.MayhemMacro._hotkey_roll(app)
+    assert len(app.queued) == 1
+    M.MayhemMacro._roll_key_up(app)
+    M.MayhemMacro._hotkey_roll(app)               # pressed again
+    assert len(app.queued) == 2
+
+
+class FakeTime:
+    def __init__(self):
+        self.t = 0.0
+
+    def now(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+
+
+def test_the_roll_thread_reports_one_line_through_the_ui_queue():
+    import threading
+    from mayhem import roller
+    clock, clicks = FakeTime(), []
+    deps = roller.RollDeps(click=lambda x, y: clicks.append((x, y)) or True,
+                           cursor=lambda: (700, 500), read_gems=lambda: roller.Gems(None),
+                           sleep=clock.sleep, now=clock.now)
+    app = RollApp()
+    stop = app._roll_stop = threading.Event()
+    M.MayhemMacro._roll_worker(app, 25, deps, stop)
+    assert clicks == [(700, 500)] * 25
+    assert app.logged == [] and app.feed == []    # nothing drawn from the roll thread
+    app.run_queued()
+    assert app.logged == [("info", "Rolled workers 25 times.")]
+    assert app.feed == [("roll", "✓", "GREEN", "Rolled workers 25 times.")]
+    assert app._roll_stop is None
+
+
+def test_an_out_of_gems_roll_and_a_broken_one():
+    import threading
+    from mayhem import roller
+    clock = FakeTime()
+    gems = iter([1100, 1000, 900] + [900] * 10)
+    deps = roller.RollDeps(click=lambda x, y: True, cursor=lambda: (1, 1),
+                           read_gems=lambda: roller.Gems(next(gems)),
+                           sleep=clock.sleep, now=clock.now)
+    app = RollApp()
+    stop = app._roll_stop = threading.Event()
+    M.MayhemMacro._roll_worker(app, "all", deps, stop)
+    app.run_queued()
+    assert app.logged == [("info", "Stopped: out of gems after 15 rolls.")]
+    assert app.feed[-1][:3] == ("roll", "■", "SUBTLE")
+
+    def broken(x, y):
+        raise OSError("no mouse")
+    deps = roller.RollDeps(click=broken, cursor=lambda: (1, 1),
+                           read_gems=lambda: roller.Gems(None))
+    later = threading.Event()
+    app._roll_stop = later                        # a newer roll: not cleared by the old one
+    M.MayhemMacro._roll_worker(app, 5, deps, stop)
+    app.run_queued()
+    assert app.logged[-1] == ("error", "Rolling stopped on an error: OSError: no mouse")
+    assert app.feed[-1][1:3] == ("×", "RED")
+    assert app._roll_stop is later
+
+
+def test_the_roll_key_is_never_hooked_while_testing():
+    app = RollApp()
+    assert M.MayhemMacro._register_roll_key(app) is None
+    assert app._roll_hotkey is None and app.logged == []
+    clash = RollApp(roll_key="F4", medal_key="F4")
+    M.MayhemMacro._register_roll_key(clash)
+    assert clash._roll_hotkey is None
+    assert clash.logged == [("warn", "the roll key F4 isn't set up: That's your Medal "
+                                     "clip key · pick another")]
+    M.MayhemMacro._unregister_roll_key(app)       # nothing hooked: fine
+
+
+def test_about_lists_the_roll_key_after_f1_and_f2():
+    app = RollApp(roll_key="ctrl+f9")
+    rows = M.MayhemMacro._shortcut_rows(app)
+    assert [k for k, _ in rows[:3]] == ["F1", "F2", "Ctrl+F9"]
+    assert rows[2][1] == M.MayhemMacro.ROLL_SHORTCUT
+    assert len(rows) == len(M.MayhemMacro.SHORTCUTS) + 1
+
+
+def test_closing_stops_a_roll(stats_file):
+    import threading
+    app = Closing(stats_file)
+    app._roll_stop = threading.Event()
+    M.MayhemMacro._close(app)
+    assert app._roll_stop.is_set() and app.destroyed

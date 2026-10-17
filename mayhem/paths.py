@@ -45,6 +45,8 @@ DEFAULT_SETTINGS: dict = {
     "medal_min": 10000000,
     "close_esc_menu": True,
     "keep_awake": True,
+    "roll_key": "F8",
+    "roll_count": 10,
     "discord": {"enabled": False, "webhook": "", "user_id": "",
                 "send": {"rare": True, "run": True, "rejoin": True, "storage": True,
                          "error": True, "stuck": True, "hourly": False},
@@ -60,6 +62,11 @@ DEFAULT_SETTINGS: dict = {
 # dropped once and the new default applies. From version 2 on, whatever is
 # saved is the user's own choice and is kept.
 SETTINGS_VERSION = 2
+
+# A number setting that may also be one of these words. roll_count is a
+# number of rolls or "all" (until out of gems).
+ALSO_WORDS = {"roll_count": ("all",)}
+ROLL_COUNT_MAX = 1000
 
 SAVE_TRIES = 3          # os.replace can fail for a moment while antivirus or
 RETRY_WAIT = 0.1        # a backup tool has the old file open
@@ -171,6 +178,10 @@ def _merge(defaults: dict, data: dict) -> dict:
             out[key] = copy.deepcopy(value)
             continue
         default = defaults[key]
+        word = value.strip().lower() if isinstance(value, str) else None
+        if word is not None and word in ALSO_WORDS.get(key, ()):
+            out[key] = word
+            continue
         # 10.0 typed by hand into an int setting is still 10
         if (isinstance(default, int) and not isinstance(default, bool)
                 and isinstance(value, float) and value.is_integer()):
@@ -185,7 +196,8 @@ def _merge(defaults: dict, data: dict) -> dict:
 
 
 def _fix_lists(st: dict) -> dict:
-    """The two list settings get a closer look than 'is it a list'."""
+    """The two list settings get a closer look than "is it a list", and
+    roll_count must be a sensible number of rolls or "all"."""
     names = {m.lower(): m for m in MAPS}
     ranked: list[str] = []
     for item in st.get("vote_maps") or []:
@@ -199,6 +211,10 @@ def _fix_lists(st: dict) -> dict:
         st["vote_click_offset"] = [int(round(v)) for v in off]
     else:
         st["vote_click_offset"] = list(DEFAULT_SETTINGS["vote_click_offset"])
+    n = st.get("roll_count")
+    if n != "all" and not (isinstance(n, int) and not isinstance(n, bool)
+                           and 1 <= n <= ROLL_COUNT_MAX):
+        st["roll_count"] = DEFAULT_SETTINGS["roll_count"]
     return st
 
 

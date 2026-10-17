@@ -36,6 +36,9 @@ something rare shows up.
 - **Storage full alert** when your storage stays full for a minute.
 - **A session bar** on top of Roblox during a run: run time, the rarest block so far, rare
   count, your votes, rejoins and anti-AFK jumps.
+- **Rolls workers for you.** Open Workers in Roblox, hover the **Roll** button and press
+  **F8**: it clicks Roll 1, 5, 10, 25, 50 or 100 times, or until you're out of gems
+  (Settings → Roll workers). Press F8 again or move the mouse to stop. Not during a run.
 - **Never gets in your way.** It only presses keys or clicks while Roblox is the window in
   front, and never while you're using your mouse or keyboard. Anything bigger (closing and
   reopening Roblox, pulling it to the front) waits until you've been away for a minute,
@@ -81,7 +84,8 @@ newest version by hand one time.
 
 - Open Block Mayhem X, then press **Start** in the app or **F1** in Roblox. **F2** stops it.
 - **Don't run it at the same time as another macro that uses F1/F2.** Those keys work
-  everywhere, so one press would start or stop both.
+  everywhere, so one press would start or stop both. The same goes for F8 (rolling
+  workers), but that one you can change on the Settings page.
 - If Roblox is in another game when you press Start, the run stops right away instead of
   touching that game. Join Block Mayhem X first.
 - **It updates itself.** When a new version is out, it asks *"v1.0.1 is available. Do you
@@ -96,8 +100,8 @@ newest version by hand one time.
   - **Activity** lists what happened in plain English, newest first.
   - **Alerts**, **World vote**, **Server** and **Discord** are the setup above.
   - **Stats** keeps your totals from every run, **Log** has every detail.
-  - **Settings** has the start-of-run steps, the session bar, keeping the PC awake and
-    update checks.
+  - **Settings** has the start-of-run steps, the session bar, rolling workers, keeping
+    the PC awake and update checks.
   - **About** has the version, update checks and every keyboard shortcut.
 
 ## Discord alerts
@@ -144,7 +148,7 @@ then click **Run anyway**. That only allows this one file.
 it's **…** → **Keep** → **Show more** → **Keep anyway**.
 
 **Your antivirus quarantines it**: don't restore it. Open an [issue](../../issues) with
-the exact detection name and I'll get it reported as a false positive. It listens for F1/F2
+the exact detection name and I'll get it reported as a false positive. It listens for F1/F2/F8
 and presses keys in Roblox, and some antivirus programs flag anything that does that.
 
 **Please never** turn off Defender or real-time protection, or add exclusions for whole
@@ -161,7 +165,8 @@ nothing you download ever should.
   - It looks at the Roblox window (screen reading with Windows' own text recognition) and
     reads Roblox's log files in `%LOCALAPPDATA%\Roblox\logs`.
   - It only presses keys and clicks inside Roblox, while Roblox is in front.
-  - It listens for F1 and F2 to start and stop. It doesn't record anything else you type.
+  - It listens for F1 and F2 to start and stop, and for F8 (or the key you picked) to roll
+    workers. It doesn't record anything else you type.
   - The only program it ever closes or opens is Roblox (`RobloxPlayerBeta.exe`), and only
     to rejoin during a run you started. The one exception is an update you said Yes to:
     then it closes itself and opens the new version.

@@ -1,4 +1,4 @@
-"""Reading Block Mayhem X's HUD: the vote timer, storage, and the spawn banner.
+"""Reading Block Mayhem X's HUD: the vote timer, storage, gems and the spawn banner.
 
 Everything is measured as a fraction of the Roblox CLIENT rect (the game
 picture without the title bar), so it holds windowed or fullscreen. Only
@@ -33,6 +33,11 @@ REGIONS = {
     "top": (0.25, 0.08, 0.75, 0.17),
     "timer": (0.5323, 0.0892, 0.6115, 0.1388),
     "storage": (0.3948, 0.0892, 0.4698, 0.1388),
+    # The gem pill right of centre ('1.1K'): client x 1050-1196, y 26-92, between
+    # the diamond icon (ends at x ~1053) and the green + button (starts at
+    # x ~1199). Text measured at x 1085-1161, y 39-79, centred on x ~1123; it
+    # still reads with every edge moved 1.2% either way.
+    "gems": (0.5469, 0.0258, 0.6229, 0.0912),
     "banner": (0.15, 0.72, 0.85, 0.89),     # tall enough for 2-3 stacked banners
     "chat": (0.0, 0.04, 0.34, 0.46),        # Roblox chat, top left
     "pinned": (0.76, 0.24, 1.0, 0.50),      # the pinned recipe and its arrow, right side
@@ -160,6 +165,67 @@ def parse_storage(lines: list[str]) -> tuple[int, int] | None:
             if cap > 0 and n <= cap * 10:
                 return n, cap
     return None
+
+
+# -------------------------------------------------------------------- gems ---
+# The gem counter: '950', '1.1K', '12.86K', '1.07M'. Letters for digits are
+# fixed only next to a digit, '.' or ',' (so the + button's 'O' stays a
+# letter), and a suffix may have junk glued after it ('1.1KO').
+_GEM_NEAR = re.compile(r"(?<=[\d.,])[OoIl|]|[OoIl|](?=[\d.,])")
+_GEMS = re.compile(r"(?<![\d.,:/])(\d{1,3}(?:,\d{3})+|\d+)(?:\s?[.,]\s?(\d{1,3}))?"
+                   r"\s?([kKmMbB])?(?![\d.,%/:])")
+_GEM_SCALE = {"": 1, "k": 1_000, "m": 1_000_000, "b": 1_000_000_000}
+GEMS_MAX = 10 ** 15
+
+
+def parse_gems(lines: list[str]) -> int | None:
+    """The gem count ('1.1K' -> 1100, '12.86K' -> 12860, '950' -> 950), None
+    if no number is there. A decimal with no K/M/B after it ('1.1') is a
+    misread (the K got lost), not a count."""
+    for ln in lines:
+        fixed = _GEM_NEAR.sub(lambda m: _DIGIT_FOR[m.group(0)], str(ln))
+        for m in _GEMS.finditer(fixed):
+            whole, frac = m.group(1).replace(",", ""), m.group(2) or ""
+            suffix = (m.group(3) or "").lower()
+            if frac and not suffix:
+                continue
+            # whole-number maths: '12.86K' is 1286 * 1000 // 100
+            places = 10 ** len(frac)
+            value = (int(whole) * places + int(frac or 0)) * _GEM_SCALE[suffix] // places
+            if value <= GEMS_MAX:
+                return value
+    return None
+
+
+def read_gems(ocr: Ocr, client: Image.Image) -> int | None:
+    """The gem counter from the client picture: the first value two reads
+    agree on, None when they never do."""
+    return _agreed(ocr, crop(client, REGIONS["gems"]), {"g": parse_gems}, [])["g"]
+
+
+_NOT_ENOUGH = re.compile(r"n[o0]t\s*en[o0]u?gh", re.I)
+
+
+def says_not_enough(lines: list[str]) -> bool:
+    """A 'Not enough gems!' kind of message."""
+    return any(_NOT_ENOUGH.search(str(t)) for t in lines)
+
+
+def not_enough_shown(ocr: Ocr, client: Image.Image) -> bool:
+    """The game says 'not enough' somewhere on screen. The chat box is left
+    out, so a player typing it doesn't count."""
+    x0, y0, x1, y1 = REGIONS["chat"]
+    w, h = client.size
+    for ln in ocr.read(client, 1.0):
+        if not says_not_enough([ln.text]):
+            continue
+        if ln.words:
+            cx = sum(wd.cx for wd in ln.words) / len(ln.words)
+            cy = sum(wd.cy for wd in ln.words) / len(ln.words)
+            if x0 * w <= cx <= x1 * w and y0 * h <= cy <= y1 * h:
+                continue
+        return True
+    return False
 
 
 # ------------------------------------------------------------------ reads ---

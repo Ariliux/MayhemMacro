@@ -475,8 +475,10 @@ SIDE_EFFECTS = {
     # swapping its files (copytree into .new, the renames that switch over)
     "mayhem/update.py": {"urlopen", "popen", "startfile", "copytree", "rename"},
     "mayhem/engine.py": {"startfile", "SendInput", "TerminateProcess", "urlopen"},
+    # the real mouse and screen for rolling workers (clicks still guard in inputs.py)
+    "mayhem/roller.py": {"click_at", "grab", "Ocr"},
     "mayhemmacro.py": {"startfile", "SetForegroundWindow", "ShowWindow",
-                       "SetThreadExecutionState", "add_hotkey"},
+                       "SetThreadExecutionState", "add_hotkey", "on_release_key"},
 }
 
 
@@ -598,11 +600,17 @@ APP_FILES = ["mayhemmacro.py", "run_mayhem.pyw"] + [
     if f.endswith(".py")]
 
 
+# The one place another app is named on purpose: Settings' hint that GlassMacro
+# uses F8 too, so the roll key can be moved when both apps are open.
+NAMED_ON_PURPOSE = {"GlassMacro also uses F8 · if both apps are open, pick another key."}
+
+
 @pytest.mark.parametrize("rel", APP_FILES)
 def test_no_other_apps_or_ai_credit_in_text_the_user_can_see(rel):
     bad = re.compile(r"(?i:glassmacro|rivals|claude|anthropic|openai|chatgpt"
                      r"|co-authored)|\bAI\b")
-    hits = [s for s in _strings(os.path.join(ROOT, rel)) if bad.search(s)]
+    hits = [s for s in _strings(os.path.join(ROOT, rel))
+            if bad.search(s) and s not in NAMED_ON_PURPOSE]
     assert hits == []
 
 

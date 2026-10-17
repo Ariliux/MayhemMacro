@@ -122,6 +122,72 @@ def test_parse_storage_rejects(lines):
     assert parse_storage(lines) is None
 
 
+# --------------------------------------------------------------- parse_gems ---
+@pytest.mark.parametrize("lines, want", [
+    (["1.1K"], 1100),
+    (["12.86K"], 12860),
+    (["950"], 950),
+    (["0"], 0),
+    (["1.07M"], 1_070_000),
+    (["2.5B"], 2_500_000_000),
+    (["1.1k"], 1100),
+    (["1.1 K"], 1100),
+    (["1.1K O"], 1100),                   # the green + button reads as 'O'
+    (["1.1KO"], 1100),                    # ...or glued on
+    (["e)", "1.5K"], 1500),
+    (["l.5K"], 1500),                     # letter l for one
+    (["1.O5K"], 1050),                    # letter O for zero
+    (["1,1K"], 1100),                     # a comma for the point
+    (["9.82K"], 9820),
+    (["1,234"], 1234),
+    (["15K"], 15000),
+    (["999.99K"], 999_990),
+])
+def test_parse_gems(lines, want):
+    got = hud.parse_gems(lines)
+    assert got == want and type(got) is int
+
+
+@pytest.mark.parametrize("lines", [
+    [], [""], ["O"], ["e)"], ["1.1"],      # a point without K/M/B: the K got lost
+    ["08:31"], ["215/350"], ["2,550%"],
+])
+def test_parse_gems_rejects(lines):
+    assert hud.parse_gems(lines) is None
+
+
+@pytest.mark.parametrize("text, want", [
+    ("Not enough gems!", True), ("NOT ENOUGH GEMS", True), ("notenough", True),
+    ("N0t en0ugh gems", True), ("You need more gems", False), ("Roll", False), ("", False)])
+def test_says_not_enough(text, want):
+    assert hud.says_not_enough([text]) is want
+
+
+class BoxOcr:
+    """A whole-client read: each (text, x, y) is one line with one word box."""
+
+    def __init__(self, lines):
+        self.lines = lines
+
+    def read(self, img, scale=2.0):
+        return [OcrLine(t, (OcrWord(t, x, y, 120.0, 24.0),)) for t, x, y in self.lines]
+
+
+def test_not_enough_on_screen_but_not_in_the_chat():
+    img = Image.new("RGB", (1920, 1009))
+    in_chat = ("Player1: not enough gems lol", 40.0, 200.0)       # top left: the chat
+    on_screen = ("Not enough gems!", 900.0, 500.0)
+    assert hud.not_enough_shown(BoxOcr([in_chat]), img) is False
+    assert hud.not_enough_shown(BoxOcr([in_chat, on_screen]), img) is True
+    assert hud.not_enough_shown(BoxOcr([("Roll", 900.0, 500.0)]), img) is False
+
+
+def test_read_gems_needs_two_reads_to_agree():
+    ocr = FakeOcr(["1.1K", "11K", "1.1K"])
+    assert hud.read_gems(ocr, Image.new("RGB", (1920, 1009))) == 1100
+    assert hud.read_gems(FakeOcr(["1.1K"]), Image.new("RGB", (1920, 1009))) is None
+
+
 # ------------------------------------------------------------- crop/regions ---
 def test_crop_uses_client_fractions():
     img = Image.new("RGB", (200, 100))
@@ -362,3 +428,39 @@ def test_frames_regions_have_margin(region, monkeypatch):
                     top = hud.read_top(_OCR, img)
                     got = top.timer if region == "timer" else top.storage
                     assert got == (timer if region == "timer" else storage), (frame, moved, top.lines)
+
+
+# The gem counter on the same frames, checked by eye: 1.1K, then 1.5K three
+# times (one with a red glow behind the pill), then 1.6K.
+GEM_TRUTH = {"215059": 1100, "215112": 1500, "215124": 1500, "215157": 1500, "215239": 1600}
+
+
+@needs_frames
+def test_frame_215059_gems_read_1_1k():
+    client = _client("215059")
+    lines = [ln.text for ln in _OCR.read(hud.crop(client, hud.REGIONS["gems"]), 4.0)]
+    assert hud.parse_gems(lines) == 1100, lines
+    assert hud.read_gems(_OCR, client) == 1100
+
+
+@needs_frames
+@pytest.mark.parametrize("frame", sorted(GEM_TRUTH))
+def test_frames_gems(frame):
+    client = _client(frame)
+    assert hud.read_gems(_OCR, client) == GEM_TRUTH[frame]
+    assert hud.not_enough_shown(_OCR, client) is False
+
+
+@needs_frames
+def test_frames_gems_region_has_margin(monkeypatch):
+    """Every edge of the gem pill's region can move 1.2% either way and
+    still read: never the diamond's outline or the + button as a digit."""
+    base = hud.REGIONS["gems"]
+    frames = {k: _client(k) for k in GEM_TRUTH}
+    for edge in range(4):
+        for delta in (-0.012, -0.01, 0.01, 0.012):
+            moved = list(base)
+            moved[edge] += delta
+            monkeypatch.setitem(hud.REGIONS, "gems", tuple(moved))
+            for frame, img in frames.items():
+                assert hud.read_gems(_OCR, img) == GEM_TRUTH[frame], (frame, moved)

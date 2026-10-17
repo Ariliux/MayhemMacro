@@ -34,7 +34,7 @@ import tkinter.font as tkfont
 
 from mayhem import APP_NAME, APP_VER, MAPS
 from mayhem import discord as D
-from mayhem import paths, rejoin, safety, update
+from mayhem import paths, rejoin, roller, safety, update
 from mayhem import stats as S
 from mayhem.blocks import display_name
 
@@ -456,6 +456,43 @@ def rank_move(ranking, name: str, step: int) -> list[str]:
     j = max(0, min(len(out) - 1, i + step))
     out.insert(j, out.pop(i))
     return out
+
+
+# ---- hotkeys typed into a box (the Medal clip key, the roll key) ------------
+DEFAULT_ROLL_KEY = paths.DEFAULT_SETTINGS["roll_key"]
+RUN_KEYS = ("F1", "F2")                 # start and stop: nothing else may use them
+_MOD_NAMES = {"CTRL": "Ctrl", "CONTROL": "Ctrl", "ALT": "Alt", "SHIFT": "Shift"}
+GLASS_KEY_HINT = "GlassMacro also uses F8 · if both apps are open, pick another key."
+
+
+def key_label(text) -> str:
+    """A hotkey as it is saved and shown: ' ctrl + f8' -> 'Ctrl+F8'."""
+    parts = [p.strip() for p in str(text or "").split("+") if p.strip()]
+    return "+".join(_MOD_NAMES.get(p.upper(), p.upper()) for p in parts)
+
+
+def same_keys(a, b) -> bool:
+    """Two hotkeys that press the same keys ('ctrl+f8' and 'Control+F8')."""
+    from mayhem.inputs import parse_keys
+    ka, kb = parse_keys(a), parse_keys(b)
+    return bool(ka and kb) and (sorted(ka[:-1]), ka[-1]) == (sorted(kb[:-1]), kb[-1])
+
+
+def roll_key_problem(text, medal_key) -> str | None:
+    """Why `text` can't be the roll key (the red note by its box), or None."""
+    from mayhem.inputs import parse_keys
+    if parse_keys(text) is None:
+        return "Use F1-F24, a letter or a number (Ctrl/Alt/Shift+ ok)"
+    if any(same_keys(text, k) for k in RUN_KEYS):
+        return "F1 and F2 start and stop runs · pick another key"
+    if same_keys(text, medal_key):
+        return "That's your Medal clip key · pick another"
+    return None
+
+
+def roll_howto(key) -> str:
+    return (f"Open Workers in Roblox, hover the Roll button, press {key}. "
+            f"Press it again to stop.")
 
 
 def _int_or_none(v) -> int | None:
@@ -1275,10 +1312,14 @@ class MayhemMacro(ctk.CTk):
         self._save_job = None
         self.session = Session(lambda: self.settings, log=self._hook_log)
         self._init_updates()
+        self._roll_stop: threading.Event | None = None   # set = stop the roll going on
+        self._roll_hotkey = None
+        self._roll_gate = roller.PressGate()
 
         self._build()
         self._drain()
         self._hotkey_handle = self._register_hotkey()
+        self._register_roll_key()
         self.log(f"--- {APP_NAME} v{APP_VER} opened ---")
         self._warn_display()
         self._after_update()
@@ -2346,7 +2387,7 @@ class MayhemMacro(ctk.CTk):
             except Exception:
                 pass
 
-    # ---- keyboard: all inside the window. F1/F2 are the only global keys ----
+    # ---- keyboard: all inside the window. F1/F2 and the roll key are the only global keys
     def _bind_keys(self):
         order = list(self.PAGE_INFO)
         for i, key in enumerate(order[:10], start=1):
@@ -3995,11 +4036,17 @@ class MayhemMacro(ctk.CTk):
             self.lbl_medal.configure(text="Use F1-F24, a letter or a number (Ctrl/Alt/Shift+ ok)",
                                      text_color=RED)
             return
-        key = "+".join(p.strip().title() if len(p.strip()) > 1 and not p.strip()[1:].isdigit()
-                       else p.strip().upper() for p in text.split("+"))
+        if same_keys(text, self.settings.get("roll_key") or DEFAULT_ROLL_KEY):
+            # pressing it for a clip would also start rolling workers
+            self.lbl_medal.configure(text="That's your roll key (Settings) · pick another",
+                                     text_color=RED)
+            return
+        key = key_label(text)
         self.settings["medal_key"] = key
         self._changed()
         self.lbl_medal.configure(text="Saved", text_color=GREEN)
+        if self._roll_hotkey is None:
+            self._register_roll_key()        # it may have clashed with the old Medal key
 
     def _hook_tested(self, status):
         text, colour = {
@@ -4589,6 +4636,41 @@ class MayhemMacro(ctk.CTk):
             [rarity_text(v) + "+" for v in vals], rarity_text(cur) + "+",
             self._bar_rare_picked)
 
+        self._group(sp, "ROLL WORKERS")
+        card = self._card(sp, corner_radius=14)
+        card.pack(fill="x")
+        key = key_label(s.get("roll_key") or DEFAULT_ROLL_KEY)
+        txt = ctk.CTkFrame(card, fg_color="transparent")
+        txt.pack(fill="x", padx=14, pady=10)
+        self.lbl_roll_howto = ctk.CTkLabel(
+            txt, text=roll_howto(key), text_color=TEXT, font=self.F(13), anchor="w",
+            justify="left", height=18, wraplength=420)
+        self.lbl_roll_howto.pack(fill="x")
+        self._rewrap_on(txt, (self.lbl_roll_howto,))
+        self.opt_roll = self._option_row(
+            card, "Rolls per press", "All keeps rolling until you're out of gems.",
+            roller.count_choices(s.get("roll_count")), roller.count_text(s.get("roll_count")),
+            self._roll_count_picked)
+        self._hairline(card)
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=14, pady=10)
+        ctk.CTkLabel(row, text="Roll key", font=self.F(13), text_color=TEXT,
+                     anchor="w").pack(side="left")
+        self.lbl_roll_key = ctk.CTkLabel(row, text="Like F8 or Ctrl+F8", font=self.F(11),
+                                         text_color=MUTED, anchor="e")
+        self.ent_roll_key = ctk.CTkEntry(row, width=110, font=self.F(13), justify="center")
+        self.ent_roll_key.insert(0, key)
+        self.ent_roll_key.pack(side="right")
+        self.lbl_roll_key.pack(side="right", padx=10)
+        self.ent_roll_key.bind("<FocusOut>", lambda e: self._roll_key_saved())
+        self.ent_roll_key.bind("<Return>", lambda e: self._roll_key_saved())
+        problem = roll_key_problem(key, s.get("medal_key"))
+        if problem:                          # a hand-edited or clashing key isn't hooked
+            self.lbl_roll_key.configure(text=problem, text_color=RED)
+        self.lbl_roll_glass = ctk.CTkLabel(card, text=GLASS_KEY_HINT, text_color=MUTED,
+                                           font=self.F(11), anchor="w", height=16)
+        self._paint_roll_key(key)
+
         self._group(sp, "WINDOW")
         card = self._card(sp, corner_radius=14)
         card.pack(fill="x")
@@ -4669,6 +4751,42 @@ class MayhemMacro(ctk.CTk):
         self.settings[key] = bool(switch.get())
         self._changed()
 
+    def _roll_count_picked(self, value):
+        self.settings["roll_count"] = roller.count_setting(value)
+        self._changed()
+
+    def _roll_key_saved(self):
+        text = self.ent_roll_key.get().strip()
+        problem = roll_key_problem(text, self.settings.get("medal_key"))
+        if problem:
+            self.lbl_roll_key.configure(text=problem, text_color=RED)
+            return
+        key = key_label(text)
+        if key != text:
+            self._entry_set(self.ent_roll_key, key)
+        changed = key != self.settings.get("roll_key")
+        self.settings["roll_key"] = key
+        self._changed()
+        self.lbl_roll_key.configure(text="Saved", text_color=GREEN)
+        self._paint_roll_key(key)
+        if changed or self._roll_hotkey is None:
+            self._register_roll_key()
+
+    def _paint_roll_key(self, key):
+        """The roll key wherever it is shown: the how-to line, the GlassMacro
+        hint (only for F8) and its row on About."""
+        try:
+            self.lbl_roll_howto.configure(text=roll_howto(key))
+            if same_keys(key, "F8"):
+                self.lbl_roll_glass.pack(fill="x", padx=14, pady=(0, 10))
+            else:
+                self.lbl_roll_glass.pack_forget()
+            cap = getattr(self, "lbl_roll_cap", None)
+            if cap is not None:
+                cap.configure(text=key)
+        except Exception:
+            pass
+
     def _bar_switched(self):
         self.settings["session_bar"] = bool(self.sw_bar.get())
         self._changed()
@@ -4742,6 +4860,14 @@ class MayhemMacro(ctk.CTk):
                  ("Ctrl T", "Keep on top while idle, on or off"),
                  ("Ctrl B", "Wide sidebar or the narrow rail"),
                  ("Esc", "Hide a note, clear the log search"))
+    # after F1 and F2, with whatever key is set on Settings
+    ROLL_SHORTCUT = "Roll workers · hover Roll in Roblox, press again to stop"
+
+    def _shortcut_rows(self) -> list[tuple[str, str]]:
+        rows = list(self.SHORTCUTS)
+        rows.insert(2, (key_label(self.settings.get("roll_key") or DEFAULT_ROLL_KEY),
+                        self.ROLL_SHORTCUT))
+        return rows
 
     def _build_about(self, page):
         sp = self._scroll_page(page)
@@ -4790,7 +4916,7 @@ class MayhemMacro(ctk.CTk):
         self._group(sp, "SHORTCUTS")
         card = self._card(sp, corner_radius=14)
         card.pack(fill="x")
-        for i, (key, what) in enumerate(self.SHORTCUTS):
+        for i, (key, what) in enumerate(self._shortcut_rows()):
             if i:
                 self._hairline(card)
             row = ctk.CTkFrame(card, fg_color="transparent")
@@ -4800,9 +4926,11 @@ class MayhemMacro(ctk.CTk):
                                width=72, height=24)
             cap.pack(side="left")
             cap.pack_propagate(False)
-            ctk.CTkLabel(cap, text=key, text_color=SUBTLE, height=18,
-                         font=self.F(10, semi=True, family="Consolas")
-                         ).pack(expand=True)
+            lbl = ctk.CTkLabel(cap, text=key, text_color=SUBTLE, height=18,
+                               font=self.F(10, semi=True, family="Consolas"))
+            lbl.pack(expand=True)
+            if what == self.ROLL_SHORTCUT:
+                self.lbl_roll_cap = lbl          # follows the key set on Settings
             ctk.CTkLabel(row, text=what, text_color=TEXT, font=self.F(12),
                          anchor="w", height=18).pack(side="left",
                                                      padx=(12, 0))
@@ -5646,6 +5774,7 @@ class MayhemMacro(ctk.CTk):
             self.log(f"couldn't start: {type(exc).__name__}: {exc}", "error")
             self._toast("Couldn't start · the Log page says why", "err")
             return
+        self._halt_roll()            # the run's clicks and the roll's must not mix
         self._run_seq = seq
         self._warn_display(feed=True)
         # (a saved link that can't work is warned about by the engine itself,
@@ -5764,6 +5893,103 @@ class MayhemMacro(ctk.CTk):
         except Exception:
             pass
 
+    # ======================================================= roll workers ==
+    # Settings > ROLL WORKERS. The player hovers the game's Roll button and
+    # presses the roll key (F8); mayhem/roller.py clicks there on a thread of
+    # its own. Not during a run. Its one line at the end comes back through _ui.
+    def _hotkey_roll(self):
+        # keyboard's own thread. Holding the key repeats it: only a real
+        # press counts, and only the work is queued for the Tk thread.
+        if self._roll_gate.down():
+            self._ui(self._toggle_roll)
+
+    def _roll_key_up(self, _event=None):
+        self._roll_gate.up()
+
+    def _toggle_roll(self):
+        """The roll key, on the Tk thread: start rolling, or stop at once."""
+        if self._roll_stop is not None:
+            self._roll_stop.set()
+            return
+        if self.running:
+            self._toast("Stop the run first (F2)", "warn")
+            return
+        if self._stopping is not None and self._stopping.is_alive():
+            self._toast("Still stopping the last run · try again in a second", "info")
+            return
+        try:
+            deps = roller.real_deps()
+        except safety.SideEffectBlocked:
+            self._toast("Rolling is off while testing", "info")
+            return
+        except Exception as exc:
+            self.log(f"couldn't start rolling: {type(exc).__name__}: {exc}", "error")
+            return
+        stop = threading.Event()
+        self._roll_stop = stop
+        count = self.settings.get("roll_count", roller.DEFAULT_COUNT)
+        threading.Thread(target=self._roll_worker, args=(count, deps, stop),
+                         daemon=True, name=f"{APP_NAME} roll").start()
+
+    def _roll_worker(self, count, deps, stop):
+        """The roll thread. Never touches the window."""
+        try:
+            line, level = roller.roll(count, deps, stop).line, "info"
+        except Exception as exc:
+            line, level = f"Rolling stopped on an error: {type(exc).__name__}: {exc}", "error"
+        self._ui(lambda: self._roll_done(stop, line, level))
+
+    def _roll_done(self, stop, line, level="info"):
+        if self._roll_stop is stop:
+            self._roll_stop = None
+        self.log(line, level)
+        glyph, colour = (("×", "RED") if level == "error" else
+                         ("✓", "GREEN") if line.startswith("Rolled") else ("■", "SUBTLE"))
+        self._feed_add("roll", glyph, colour, line)
+
+    def _halt_roll(self):
+        """Stop rolling, if it is (a run is starting, the app is closing)."""
+        if self._roll_stop is not None:
+            self._roll_stop.set()
+
+    def _register_roll_key(self):
+        """The roll key, global like F1/F2 while the app is open. Never while
+        testing. Set up again whenever the key changes."""
+        self._unregister_roll_key()
+        key = key_label(self.settings.get("roll_key") or DEFAULT_ROLL_KEY)
+        problem = roll_key_problem(key, self.settings.get("medal_key"))
+        if problem:
+            self.log(f"the roll key {key} isn't set up: {problem}", "warn")
+            return
+        try:
+            safety.guard("the roll hotkey")
+        except safety.SideEffectBlocked:
+            return
+        try:
+            import keyboard
+            combo = key.lower()                       # 'ctrl+f8'
+            hot = keyboard.add_hotkey(combo, self._hotkey_roll)
+        except Exception as exc:
+            self.log(f"couldn't set up the {key} key for rolling workers ({exc})", "warn")
+            return
+        try:
+            up = keyboard.on_release_key(combo.split("+")[-1], self._roll_key_up)
+        except Exception:
+            up = None             # the gate then counts a press after a quiet second
+        self._roll_hotkey = (hot, up)
+
+    def _unregister_roll_key(self):
+        handles, self._roll_hotkey = self._roll_hotkey, None
+        if not handles:
+            return
+        try:
+            import keyboard
+            keyboard.remove_hotkey(handles[0])
+            if handles[1] is not None:
+                keyboard.unhook(handles[1])
+        except Exception:
+            pass
+
     # ================================================ engine events -> UI ==
     def _on_event(self, seq, ev):
         """One event from the engine, on the Tk thread."""
@@ -5850,6 +6076,7 @@ class MayhemMacro(ctk.CTk):
         # sender waits ~2 s to batch), and the process ends right after this.
         self.session.flush_sender(2.0)
         keep_awake(False)
+        self._halt_roll()                # a roll going on stops with the app
         if self._hotkey_handle is not None:
             try:
                 import keyboard
@@ -5857,6 +6084,8 @@ class MayhemMacro(ctk.CTk):
                     keyboard.remove_hotkey(h)
             except Exception:
                 pass
+        self._unregister_roll_key()
+        roller.release()
         # a page / size / place change from the last second is still waiting
         # on its timer: save it now (no-op when withdrawn/iconic)
         if self._win_save:

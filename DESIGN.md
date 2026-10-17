@@ -13,7 +13,8 @@ does the work; the window only shows what the engine reports.
   window in front and the session is Block Mayhem X, and never while you're using the PC
   (no input if there was real input in the last 5 s). Input the macro made itself in the
   last 1.5 s doesn't count as yours. The screen is only read while Roblox is in front and
-  not minimised.
+  not minimised. The one exception is [rolling workers](#rolling-workers): you start it
+  with the roll key while you're at the PC, and it stops as soon as you move the mouse.
 - **Disruptive steps wait until you're away**: no keyboard or mouse input for 60 s and no
   full-screen program (a video, another game, a presentation) in front. Closing and
   reopening Roblox for a rejoin, and pulling Roblox to the front for an anti-AFK jump
@@ -75,6 +76,7 @@ rect** (the game picture without the title bar), so Roblox may be windowed or fu
 |---|---|---|
 | vote timer | 0.532, 0.089, 0.612, 0.139 | the only `mm:ss` |
 | storage | 0.395, 0.089, 0.470, 0.139 | `n/m` |
+| gems | 0.547, 0.026, 0.623, 0.091 | `950`, `1.1K`, `12.86K` (K/M/B) |
 | spawn banner | 0.15, 0.72, 0.85, 0.89 | `<Block> has spawned! (1 / <N>)` |
 | chat | 0.0, 0.04, 0.34, 0.46 | `<player> has collected a <Block> with a 1 / <N> chance!` |
 | pinned recipe | 0.76, 0.24, 1.0, 0.50 | the "Pinned Recipe" header and its arrow button |
@@ -172,6 +174,20 @@ Mayhem X join and `Entered play session.` within 120 s, then the `loaded` line w
 more. Failed tries back off 30 / 60 / 120 / 300 s; after 5 in a row the run stops with a
 "stuck" alert. At most 6 rejoins an hour.
 
+## Rolling workers
+
+Not part of a run: the player opens Workers in Roblox, hovers the game's Roll button and
+presses the roll key (`roll_key`, F8; never F1, F2 or the Medal key). `mayhem/roller.py`
+left-clicks at that cursor spot every 0.4 s on a thread of its own, `roll_count` times
+(1, 5, 10, 25, 50, 100) or, with `"all"`, until the gem pill stops going down (read every
+3 clicks, 3 reads in a row without a drop) or the game says "not enough" anywhere outside
+the chat. It also stops when the key is pressed again, when the mouse is moved more than
+20 px from the spot, and when a click doesn't go through (Roblox isn't in front). It
+refuses to start during a run, and a run starting stops it. Holding the key is one press:
+a key-down only counts after a key-up (or a quiet second). The end is one Activity and Log
+line ("Rolled workers 25 times.", "Stopped: out of gems after 37 rolls."). The clicks go
+through `inputs.click_at`, so they keep its guard and its Roblox-in-front check.
+
 ## Updates
 
 `mayhem/update.py` does the checking and installing; the window only asks and shows.
@@ -236,6 +252,7 @@ mayhem/discord.py    the webhook sender and the alert messages
 mayhem/stats.py      stats.json
 mayhem/update.py     the update check, download, unpacking and file swap
 mayhem/overlay.py    the session bar
+mayhem/roller.py     rolling workers: the click loop, the gem check, the roll key's press gate
 mayhem/engine.py     the run loop (one thread)
 mayhemmacro.py       the window
 run_mayhem.pyw       double-click launcher (hands over to .venv's pythonw)
