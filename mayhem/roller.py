@@ -1,5 +1,5 @@
-"""Roll workers: click the game's Roll button again and again, right where the
-cursor is.
+"""Summon workers: click the game's Summon button again and again, right where
+the cursor is.
 
 The player opens Workers in Roblox, hovers the Roll button and presses the roll
 key (F8 unless it was changed on Settings). roll() then left-clicks at that
@@ -89,24 +89,24 @@ def count_choices(current) -> list[str]:
 
 
 def _rolls(n: int) -> str:
-    return f"{n} roll" if n == 1 else f"{n} rolls"
+    return f"{n} summon" if n == 1 else f"{n} summons"
 
 
-_ZERO = {"stopped": "Didn't roll: stopped right away.",
-         "moved": "Didn't roll: the mouse moved.",
-         "front": "Didn't roll: Roblox isn't in front."}
+_ZERO = {"stopped": "Didn't summon: stopped right away.",
+         "moved": "Didn't summon: the mouse moved.",
+         "front": "Didn't summon: Roblox isn't in front."}
 
 
 def result_line(r: RollResult) -> str:
     if r.why == "done":
-        return f"Rolled workers {r.rolls} time{'' if r.rolls == 1 else 's'}."
+        return f"Summoned workers {r.rolls} time{'' if r.rolls == 1 else 's'}."
     if r.rolls == 0 and r.why in _ZERO:
         return _ZERO[r.why]
     after = _rolls(r.rolls)
-    return {"stopped": f"Stopped rolling after {after}.",
+    return {"stopped": f"Stopped summoning after {after}.",
             "moved": f"Stopped: you moved the mouse after {after}.",
             "front": f"Stopped: Roblox isn't in front after {after}.",
-            }.get(r.why, f"Stopped rolling after {after}.")
+            }.get(r.why, f"Stopped summoning after {after}.")
 
 
 # ------------------------------------------------------------- the loop ---

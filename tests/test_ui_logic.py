@@ -982,8 +982,8 @@ def test_the_update_section_split_is_strict():
 
 def test_every_page_has_both_icons_and_ten_pages():
     info = M.MayhemMacro.PAGE_INFO
-    assert list(info) == ["home", "activity", "alerts", "vote", "server", "discord",
-                          "stats", "log", "settings", "about"]
+    assert list(info) == ["home", "activity", "workers", "alerts", "vote", "server",
+                          "discord", "stats", "log", "settings", "about"]
     for key, (title, sub, group, glyph, alt) in info.items():
         assert title and sub and group and glyph and alt
 
@@ -1046,7 +1046,7 @@ def test_roll_key_labels_and_clashes():
     assert M.roll_key_problem("F8", "not a key") is None
     for junk in ("", "F25", "Win+F8", "F8+F9", "Esc", None):
         assert "Use F1-F24" in M.roll_key_problem(junk, "F4")
-    assert M.roll_howto("F8") == ("Open Workers in Roblox, hover the Roll button, press F8. "
+    assert M.roll_howto("F8") == ("Open Workers in Roblox, hover the Summon button, press F8. "
                                   "Press it again to stop.")
     assert M.DEFAULT_ROLL_KEY == "F8" and "GlassMacro" in M.GLASS_KEY_HINT
 
@@ -1121,7 +1121,7 @@ def test_rolling_waits_for_a_run_that_is_still_stopping():
 def test_rolling_never_starts_for_real_while_testing():
     app = RollApp()
     M.MayhemMacro._toggle_roll(app)
-    assert app.toasts == [("Rolling is off while testing", "info")]
+    assert app.toasts == [("Summoning is off while testing", "info")]
     assert app._roll_stop is None
 
 
@@ -1177,8 +1177,8 @@ def test_the_roll_thread_reports_one_line_through_the_ui_queue():
     assert clicks == [(700, 500)] * 25
     assert app.logged == [] and app.feed == []    # nothing drawn from the roll thread
     app.run_queued()
-    assert app.logged == [("info", "Rolled workers 25 times.")]
-    assert app.feed == [("roll", "✓", "GREEN", "Rolled workers 25 times.")]
+    assert app.logged == [("info", "Summoned workers 25 times.")]
+    assert app.feed == [("roll", "✓", "GREEN", "Summoned workers 25 times.")]
     assert app._roll_stop is None
 
 
@@ -1198,7 +1198,7 @@ def test_an_all_roll_and_a_broken_one():
     app._roll_stop = stop
     M.MayhemMacro._roll_worker(app, "all", deps, stop)
     app.run_queued()
-    assert app.logged == [("info", "Stopped rolling after 40 rolls.")]
+    assert app.logged == [("info", "Stopped summoning after 40 summons.")]
     assert app.feed[-1][:3] == ("roll", "■", "SUBTLE")
 
     def broken(x, y):
@@ -1208,7 +1208,7 @@ def test_an_all_roll_and_a_broken_one():
     app._roll_stop = later                        # a newer roll: not cleared by the old one
     M.MayhemMacro._roll_worker(app, 5, deps, threading.Event())
     app.run_queued()
-    assert app.logged[-1] == ("error", "Rolling stopped on an error: OSError: no mouse")
+    assert app.logged[-1] == ("error", "Summoning stopped on an error: OSError: no mouse")
     assert app.feed[-1][1:3] == ("×", "RED")
     assert app._roll_stop is later
 
@@ -1220,7 +1220,7 @@ def test_the_roll_key_is_never_hooked_while_testing():
     clash = RollApp(roll_key="F4", medal_key="F4")
     M.MayhemMacro._register_roll_key(clash)
     assert clash._roll_hotkey is None
-    assert clash.logged == [("warn", "the roll key F4 isn't set up: That's your Medal "
+    assert clash.logged == [("warn", "the summon key F4 isn't set up: That's your Medal "
                                      "clip key · pick another")]
     M.MayhemMacro._unregister_roll_key(app)       # nothing hooked: fine
 

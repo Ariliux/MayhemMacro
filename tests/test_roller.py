@@ -105,7 +105,7 @@ def test_pressing_the_key_again_stops_at_once():
     g = Game(stop_at=4)
     r = g.roll(100)
     assert r == RollResult(4, "stopped")
-    assert r.line == "Stopped rolling after 4 rolls."
+    assert r.line == "Stopped summoning after 4 summons."
 
 
 def test_a_stop_during_the_wait_is_noticed_within_a_step():
@@ -133,7 +133,7 @@ def test_moving_the_mouse_away_takes_over():
     g = Game(cursor_at={3: (SPOT[0] + 25, SPOT[1])})
     r = g.roll(50)
     assert r == RollResult(3, "moved")
-    assert r.line == "Stopped: you moved the mouse after 3 rolls."
+    assert r.line == "Stopped: you moved the mouse after 3 summons."
 
 
 def test_a_small_wobble_keeps_rolling():
@@ -146,7 +146,7 @@ def test_roblox_not_in_front_stops_it():
     g = Game(fail_at=6)
     r = g.roll(25)
     assert r == RollResult(5, "front")
-    assert r.line == "Stopped: Roblox isn't in front after 5 rolls."
+    assert r.line == "Stopped: Roblox isn't in front after 5 summons."
 
 
 def test_a_click_that_failed_because_the_mouse_moved_says_so():
@@ -173,13 +173,13 @@ def test_all_still_stops_for_the_mouse_and_roblox():
 
 # ----------------------------------------------------------------- lines ---
 @pytest.mark.parametrize("r, line", [
-    (RollResult(25, "done"), "Rolled workers 25 times."),
-    (RollResult(1, "done"), "Rolled workers 1 time."),
-    (RollResult(1, "stopped"), "Stopped rolling after 1 roll."),
-    (RollResult(0, "front"), "Didn't roll: Roblox isn't in front."),
-    (RollResult(0, "stopped"), "Didn't roll: stopped right away."),
-    (RollResult(0, "moved"), "Didn't roll: the mouse moved."),
-    (RollResult(4, "odd"), "Stopped rolling after 4 rolls."),
+    (RollResult(25, "done"), "Summoned workers 25 times."),
+    (RollResult(1, "done"), "Summoned workers 1 time."),
+    (RollResult(1, "stopped"), "Stopped summoning after 1 summon."),
+    (RollResult(0, "front"), "Didn't summon: Roblox isn't in front."),
+    (RollResult(0, "stopped"), "Didn't summon: stopped right away."),
+    (RollResult(0, "moved"), "Didn't summon: the mouse moved."),
+    (RollResult(4, "odd"), "Stopped summoning after 4 summons."),
 ])
 def test_result_lines(r, line):
     assert r.line == line
