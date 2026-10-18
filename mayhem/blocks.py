@@ -44,6 +44,7 @@ _TABLE: tuple[tuple[str, int], ...] = (
     ("Lucid", 250_000), ("Snowstorm", 100_000),
     # read in game, world not known yet
     ("Diamond", 100_000),
+    ("Arboric", 100_000_000),            # chat: "Inverted Arboric ... 1 / 1,000,000,000" (x10)
     # anywhere
     ("Rare", 200),
 )

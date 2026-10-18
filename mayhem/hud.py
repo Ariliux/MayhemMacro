@@ -15,7 +15,7 @@ import difflib
 from dataclasses import replace, dataclass, field
 from typing import Any, Callable
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageChops, ImageOps
 
 from .ocr import Ocr, texts
 
@@ -316,8 +316,8 @@ class Find:
 # joined into one string, and when one message's 'with a 1 / N chance' is
 # misread, the name must not run on into the next message.
 _COLLECT = re.compile(r"([A-Za-z0-9_]{3,20})\s+has\s+co[l1I]{2}ected\s+an?\s+"
-                      r"((?:[^\s!]+\s+){0,3}?[^\s!]+)\s+with\s+an?\s+"
-                      r"[1lI|]\s*/\s*([\dOo,. ]{1,16}?)\s*chance", re.I)
+                      r"((?:[^\s!]+\s+){0,3}?[^\s!]+)\s+(?:w\w{1,4}\s+)?an?\s+"
+                      r"[1lI|]\s*/\s*(\d[\dOo,.]*)", re.I)
 _PICKUP = re.compile(r"just\s+pi\w*\s+up\s+an?\s+(.+?)\s+\w*lo\w*k\b", re.I)
 
 
@@ -384,8 +384,20 @@ def parse_pickup(text: str) -> Find | None:
     return Find(block, variant, blocks.rarity_of(block, variant), "pickup")
 
 
+def chat_image(img: Image.Image) -> Image.Image:
+    """The chat is every color (pink names, rarity colors, rainbow Chromatic):
+    read its brightest channel instead, so any bright letter comes out black
+    on white and the color doesn't matter."""
+    r, g, b = img.convert("RGB").split()
+    v = ImageChops.lighter(ImageChops.lighter(r, g), b)
+    return ImageOps.invert(ImageOps.autocontrast(v)).convert("RGB")
+
+
 def read_chat(ocr: Ocr, client: Image.Image) -> tuple[list[str], list[Find]]:
-    lines = texts(ocr.read(crop(client, REGIONS["chat"]), 2.0))
+    got = ocr.read(chat_image(crop(client, REGIONS["chat"])), 2.0)
+    # Top to bottom, so a find wrapped over two or three lines joins up again.
+    got = sorted(got, key=lambda ln: min((w.y for w in ln.words), default=0.0))
+    lines = texts(got)
     return lines, parse_collects(lines)
 
 

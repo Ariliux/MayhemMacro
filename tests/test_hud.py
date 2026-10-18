@@ -464,3 +464,24 @@ def test_frames_gems_region_has_margin(monkeypatch):
             monkeypatch.setitem(hud.REGIONS, "gems", tuple(moved))
             for frame, img in frames.items():
                 assert hud.read_gems(_OCR, img) == GEM_TRUTH[frame], (frame, moved)
+
+
+def test_chat_finds_survive_wrapping_and_lost_words():
+    # Real OCR of a 1080p chat (2026-10-18): each find wrapped over lines,
+    # "with" dropped and "chance" mangled around the colored words.
+    lines = ["RedAriliux has collected a Resonmce", "a 1 / 100,000", "�mce!",
+             "(GLOBAL] Unknom: wwin08 has collected a Inverted Arboric", "a 1 / 1,000,000,000"]
+    got = [(f.who, f.variant, f.block, f.denominator) for f in hud.parse_collects(lines)]
+    assert got == [("RedAriliux", "normal", "Resonance", 100_000),
+                   ("wwin08", "inverted", "Arboric", 1_000_000_000)]
+    assert hud.same_player("RedAriliux", "RealAriliux")
+
+
+def test_chat_is_read_color_blind():
+    from PIL import Image
+    img = Image.new("RGB", (4, 1))
+    img.putpixel((1, 0), (255, 0, 200))      # pink letter
+    img.putpixel((2, 0), (40, 255, 60))      # green letter
+    out = hud.chat_image(img)
+    assert out.getpixel((0, 0))[0] > 200     # dark background -> white
+    assert out.getpixel((1, 0))[0] < 50 and out.getpixel((2, 0))[0] < 50   # any bright color -> black
