@@ -111,6 +111,8 @@ VOTE_RECHECK = 2.0          # after a click, look again this much later
 VOTE_COOLDOWN = 90.0        # no new vote search this soon after one ended
 VOTE_SCALE = 1.25           # whole-client OCR: 1.0-1.5 keeps it under ~250 ms
 VOTE_MISSES = 3             # click_at said no this often: give up on this vote
+VOTE_TITLE_AFTER = 2.0      # round timer gone this long: look for the vote screen itself
+VOTE_TITLE_EVERY = 2.0      # ...this often
 VOTE_NOTE = 180.0           # a world change this soon after voting mentions the vote
 
 STORAGE_FULL_FOR = 60.0     # full this long before the alert
@@ -447,6 +449,7 @@ class Engine:
         self._step("getting the game ready", self._setup, now, st, look)
         self._step("clipping with Medal", self._medal, now, st, look)
         self._step("closing the Roblox menu", self._esc_menu, now, st, look)
+        self._step("looking for the map vote", self._vote_title, now, st, look)
         self._step("doing the anti-AFK jump", self._anti_afk, now, st, look)
         self._step("sending a rare block alert", self._flush_log_rares, now, st, look)
         self._step("updating the HUD", self._send_hud, now)
@@ -457,6 +460,7 @@ class Engine:
         """Fresh per-run state."""
         self._first = True
         self._esc_at = self._esc_pressed_at = _NEVER
+        self._title_at = _NEVER
         self._clip_at: float | None = None      # when to press the Medal clip key
         self._clip_last = _NEVER
         self._play_at = _NEVER
@@ -1253,6 +1257,32 @@ class Engine:
         if ok:
             self._esc_pressed_at = now
             self._log("info", "Closed the Roblox menu (Esc) so the macro can see the game.")
+
+    # -- the vote screen, seen directly ---------------------------------------------
+    def _vote_title(self, now: float, st: dict, look: _Look) -> None:
+        """The vote screen hides the round timer. If the timer was missed
+        (covered, misread, the game changed it) the timer never says 'vote
+        now', so with the top bar gone a moment, look for the vote screen's
+        own title and start the vote from that."""
+        if not _flag(st, "auto_vote") or not look.readable:
+            return
+        if self._vote is not None or self._busy is not None or self._rj is not None:
+            return
+        if now < self._vote_quiet_until or now - self._timer_at < VOTE_TITLE_AFTER:
+            return
+        if now - self._title_at < VOTE_TITLE_EVERY:
+            return
+        self._title_at = now
+        w = self.deps.window
+        rect = w.client_rect(look.hwnd)
+        if not rect:
+            return
+        try:
+            img = w.grab(rect)
+        except Exception:                   # the screen step already says when it can't see
+            return
+        if hud.vote_title_shown(self.deps.ocr, img):
+            self._start_vote(now)
 
     # -- Medal clips ----------------------------------------------------------------
     def _medal(self, now: float, st: dict, look: _Look) -> None:

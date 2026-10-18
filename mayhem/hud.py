@@ -31,6 +31,7 @@ from . import blocks
 
 REGIONS = {
     "top": (0.25, 0.08, 0.75, 0.17),
+    "vote_title": (0.2, 0.14, 0.8, 0.32),       # "Pick what map should be chosen next!"
     "timer": (0.5323, 0.0892, 0.6115, 0.1388),
     "storage": (0.3948, 0.0892, 0.4698, 0.1388),
     # The gem pill right of centre ('1.1K'): client x 1050-1196, y 26-92, between
@@ -399,6 +400,12 @@ def read_chat(ocr: Ocr, client: Image.Image) -> tuple[list[str], list[Find]]:
     got = sorted(got, key=lambda ln: min((w.y for w in ln.words), default=0.0))
     lines = texts(got)
     return lines, parse_collects(lines)
+
+
+def vote_title_shown(ocr: Ocr, client: Image.Image) -> bool:
+    """The map vote is up: its title 'Pick what map should be chosen next!'."""
+    text = " ".join(texts(ocr.read(crop(client, REGIONS["vote_title"]), 1.0))).lower()
+    return "chosen next" in text or ("pick" in text and "map" in text)
 
 
 def esc_menu_open(ocr: Ocr, client: Image.Image) -> bool:

@@ -1921,3 +1921,19 @@ def test_esc_menu_is_left_alone_while_you_play():
         r.clock.touch()
         r.tick()
     assert ("scan", 0x01) not in r.inputs.calls
+
+
+def test_the_vote_starts_from_the_vote_screen_even_when_the_timer_was_never_read():
+    r = Rig().start()
+    r.ocr.script["timer"] = []                       # the round timer was never seen
+    r.ocr.script["vote_title"] = ["Pick what map should be chosen next!"]
+    r.run(6)
+    assert r.engine._vote is not None
+
+
+def test_no_vote_search_from_other_screens():
+    r = Rig().start()
+    r.ocr.script["timer"] = []
+    r.ocr.script["vote_title"] = ["Loading Void...", "There are currently 5 different worlds"]
+    r.run(6)
+    assert r.engine._vote is None
