@@ -317,7 +317,7 @@ class Find:
 # joined into one string, and when one message's 'with a 1 / N chance' is
 # misread, the name must not run on into the next message.
 _COLLECT = re.compile(r"([A-Za-z0-9_]{3,20})\s+has\s+co[l1I]{2}ected\s+an?\s+"
-                      r"((?:[^\s!]+\s+){0,3}?[^\s!]+)\s+(?:w\w{1,4}\s+)?an?\s+"
+                      r"((?:[^\s!]+\s+){0,3}?[^\s!]+)\s+(?:w\S{1,4}\s+)?an?\s+"
                       r"[1lI|]\s*/\s*(\d[\dOo,.]*)", re.I)
 _PICKUP = re.compile(r"just\s+pi\w*\s+up\s+an?\s+(.+?)\s+\w*lo\w*k\b", re.I)
 
@@ -352,8 +352,13 @@ def parse_collects(lines: list[str]) -> list[Find]:
     out = []
     for m in _COLLECT.finditer(text):
         block, variant = _split_variant(m.group(2).strip())
-        block = blocks.fix_name(block)
-        variant, den = blocks.snap(block, variant, _number(m.group(3)))
+        read = _number(m.group(3))
+        block = blocks.by_rarity(block, variant, read)
+        if block.lower() in ("inverted", "chromatic") or len(re.sub(r"[^A-Za-z]", "", block)) < 3:
+            continue                            # the name itself wasn't read
+        variant, den = blocks.snap(block, variant, read)
+        if den is None:
+            den = blocks.rarity_of(block, variant)
         out.append(Find(block, variant, den, "chat", m.group(1)))
     return out
 
@@ -541,7 +546,7 @@ def _checked(b: Banner) -> Banner:
     """A parsed banner checked against the block table: the name's OCR typo
     fixed ('Reljc' -> 'Relic') and a misread number snapped to a real one
     ('1 / 250' -> 250,000). Every way a banner is read goes through this."""
-    b = replace(b, block=blocks.fix_name(b.block))
+    b = replace(b, block=blocks.by_rarity(b.block, b.variant, b.denominator))
     v, d = blocks.snap(b.block, b.variant, b.denominator)
     return replace(b, variant=v, denominator=d)
 

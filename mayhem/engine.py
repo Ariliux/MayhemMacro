@@ -65,6 +65,7 @@ SETUP_IDLE = 1.5            # start-of-run setup waits this long after your last
 START_PLAY_FOR = 90.0       # a run started on the title screen: look for PLAY this long
 PLAY_EVERY = 1.5            # look for the title screen's PLAY button this often while loading
 MEDAL_DELAY = 10.0          # press the clip key this long after the detection (the clip shows it)
+CLIP_SAME = 600.0           # the same block isn't clipped again (spawn, then its pickup) this soon
 MEDAL_GAP = 20.0            # at most one clip this often
 ESC_CHECK_EVERY = 3.0       # look for Roblox's Esc menu this often...
 ESC_HUD_LOST = 6.0          # ...once the game's top bar has been hidden this long
@@ -468,6 +469,7 @@ class Engine:
         self._title_at = _NEVER
         self._front_at = _NEVER
         self._start_play_until: float | None = None
+        self._clipped: dict[str, float] = {}
         self._clip_at: float | None = None      # when to press the Medal clip key
         self._clip_last = _NEVER
         self._play_at = _NEVER
@@ -731,6 +733,8 @@ class Engine:
               source: str, picture: Image.Image | None, key: str) -> None:
         """One rare block sighting -> an alert (or a log line when it is below
         the user's threshold), merged with other sightings of the same block."""
+        if len(re.sub(r"[^A-Za-z]", "", block)) < 3 and not blocks.is_known(block):
+            return                              # an OCR scrap ('D spawned!'), not a block
         if source == "log_chromatic":
             # Roblox writes this minutes after the block was there, so it can
             # only be matched to a chromatic banner, from up to 15 min back.
@@ -774,6 +778,7 @@ class Engine:
             if (_flag(st, "medal_clip") and self._clip_at is None
                     and denom >= _int(st, "medal_min", 1)):   # its own, higher bar (10M by default)
                 self._clip_at = now + MEDAL_DELAY
+                self._clipped[f"{variant}:{blocks.display_name(block).lower()}"] = now
         ping = denom is not None and denom >= _int(st, "rare_ping_min", 0)
         self._emit({"type": "rare", "block": name, "denominator": denom, "variant": variant,
                     "source": source, "ping": ping, "picture": picture, "world": self.world})
@@ -896,6 +901,13 @@ class Engine:
         if len(self._finds_seen) > 300:
             self._prune(self._finds_seen, now - FIND_QUIET, lambda v: v)
         name = blocks.display_name(f.block)
+        st = self._settings()
+        ck = f"{f.variant}:{name.lower()}"
+        if (f.denominator and _flag(st, "medal_clip") and self._clip_at is None
+                and f.denominator >= _int(st, "medal_min", 1)
+                and now - self._clipped.get(ck, _NEVER) > CLIP_SAME):
+            self._clipped[ck] = now
+            self._clip_at = now + MEDAL_DELAY
         self._emit({"type": "collected", "block": name, "variant": f.variant,
                     "denominator": f.denominator, "how": f.how})
         odds = f" (1 in {f.denominator:,})" if f.denominator else ""
@@ -908,6 +920,7 @@ class Engine:
         but only when they read cleanly: the game's own worker banners (Ritual,
         Fragment Frenzy, Golden Touch...) are skipped, OCR scraps are skipped,
         and near-copies of a banner already logged are skipped."""
+        return                                  # the game's own messages and tips: not wanted in the log
         import difflib
         for text in lines:
             t = " ".join(str(text).split())
@@ -1383,7 +1396,7 @@ class Engine:
         pt = hud.pinned_arrow(img)
         if pt is None:
             self._picture(img, "pinned_missing")   # so the arrow can be tuned from a real picture
-            self._log("warn", "Couldn't find the pinned recipe arrow (saved a picture of it).")
+            self._log("warn", "Couldn't find the pinned recipe arrow.")
             return
         if pt[2] != "left":
             # ▶: the panel is open, its header just wasn't read (no text

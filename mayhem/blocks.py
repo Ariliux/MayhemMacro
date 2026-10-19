@@ -44,7 +44,9 @@ _TABLE: tuple[tuple[str, int], ...] = (
     ("Lucid", 250_000), ("Snowstorm", 100_000),
     # read in game, world not known yet
     ("Diamond", 100_000),
-    ("Arboric", 100_000_000),            # chat: "Inverted Arboric ... 1 / 1,000,000,000" (x10)
+    ("Arboric", 100_000_000),
+    ("Primordial", 111_111_111),         # chat: "has collected a Primordial with a 1 / 111,111,111 chance"
+    ("Borealis", 3_500_000),             # chat, Arctic            # chat: "Inverted Arboric ... 1 / 1,000,000,000" (x10)
     # anywhere
     ("Rare", 200),
 )
@@ -103,6 +105,30 @@ def fix_name(raw: str) -> str:
         if best:
             return keys[rest[best[0]]]
     return raw
+
+
+def by_rarity(raw: str, variant: str, den: int | None) -> str:
+    """A garbled name whose rarity read fine: the rarity narrows it down to a
+    few blocks ('Voi&inpc' at 1 in 1,000,000 can only be a 1M block, and
+    Voidrinyx is the closest of those; 'Erup€on wit'' -> Eruption). Known
+    names, unknown rarities and names close to nothing come back as they are
+    (after the usual typo fixing)."""
+    import difflib
+    fixed = fix_name(raw)
+    if not den or is_known(fixed):
+        return fixed
+    times = VARIANT_TIMES.get(variant, 1)
+    group = {_key(n): n for n, r in _TABLE if r * times == den}
+    k = _key(raw)
+    if not group or len(k) < 3:
+        return fixed
+    best = difflib.get_close_matches(k, list(group), n=1, cutoff=0.45)
+    if best:
+        return group[best[0]]
+    for gk, name in group.items():           # the start of a name reads best
+        if gk.startswith(k[:4]):
+            return name
+    return fixed
 
 
 def is_known(name: str) -> bool:

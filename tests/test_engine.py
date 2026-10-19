@@ -1122,14 +1122,11 @@ def test_known_block_without_a_number_uses_the_table():
     assert r.of("rare")[0]["denominator"] == 505000
 
 
-def test_unknown_banner_text_is_logged_once():
+def test_banners_that_are_not_blocks_are_not_logged():
     r = Rig().start()
-    r.ocr.script["banner"] = ["A meteor shower is happening now!",
-                              "e)", "12"]
-    r.run(30)
-    banners = [t for t in r.logs("info") if t.startswith("Banner:")]
-    assert banners == ['Banner: "A meteor shower is happening now!"']
-    assert r.of("rare") == []
+    r.ocr.script["banner"] = ["The original Block Mayhem was my very first game!"]
+    r.run(4)
+    assert not any(t.startswith("Banner:") for t in r.logs("info"))
 
 
 @pytest.mark.parametrize("raw, name, den, ping", [
@@ -1879,7 +1876,7 @@ def test_medal_clip_after_a_rare_spawn_at_your_setting():
     ("Domh•tor •ctiv•ted Golden Touch'", False),
     ("The worker summoning pool has refreshed!", False),
     ("World voting concluded! The new world is Dreamland,", False),
-    ("A meteor shower is happening now!", True),
+    ("A meteor shower is happening now!", False),     # no banner lines at all now
 ])
 def test_only_clean_unknown_banners_are_logged(text, logged):
     r = Rig().start()
@@ -1988,3 +1985,21 @@ def test_play_is_not_looked_for_later_in_a_loaded_game():
     r.ocr.script["client"] = [OcrLine("Play", (OcrWord("Play", 300, 900, 120, 40),))]
     r.run(4)
     assert not any("Pressed Play" in t for t in r.logs("info"))
+
+
+def test_a_rare_seen_only_in_the_chat_is_clipped_too():
+    r = Rig(medal_clip=True, medal_key="F4", medal_min=10_000_000).start()
+    pressed = []
+    r.inputs.press_keys = lambda key: pressed.append(key) or True
+    r.run(2)                                         # the first chat read only learns what's there
+    r.ocr.script["chat"] = ["Player1 has collected a Primorddk• with a 1 / 111,111,111 chance!"]
+    r.run(int(engine_mod.MEDAL_DELAY / engine_mod.TICK) + 6)
+    assert pressed == ["F4"]
+    assert any("Collected Primordial (1 in 111,111,111)" in t for t in r.logs("info"))
+
+
+def test_junk_banner_names_are_not_rares():
+    r = Rig().start()
+    r.ocr.script["banner"] = ["D has spawned!"]
+    r.run(4)
+    assert not r.of("rare")

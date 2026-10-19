@@ -485,3 +485,22 @@ def test_chat_is_read_color_blind():
     out = hud.chat_image(img)
     assert out.getpixel((0, 0))[0] > 200     # dark background -> white
     assert out.getpixel((1, 0))[0] < 50 and out.getpixel((2, 0))[0] < 50   # any bright color -> black
+
+
+@pytest.mark.parametrize("line, want", [
+    ("Player1 has collected a Primorddk• with a 1 / 111,111,111 chance!", ("normal", "Primordial", 111_111_111)),
+    ("Player1 has collected a Voi&inpc with a 1 / 1,000,000 chance!", ("normal", "Voidrinyx", 1_000_000)),
+    ("Player1 has collected a Erup€on wit' a 1 / 100,000 chance!", ("normal", "Eruption", 100_000)),
+    ("Player1 has collected a Resonmce wi&t a 1 / 100,000 chance!", ("normal", "Resonance", 100_000)),
+    ("Player1 has collected a Doredis wit' a 1 / 3,500,000 chance!", ("normal", "Borealis", 3_500_000)),
+    ("Player1 has collected a Tempcrid with a 1 / 500,000 chance!", ("normal", "Temporal", 500_000)),
+    ("Player1 has collected a SNAKEDECK with a 1 / 505,000 chance!", ("normal", "SNAKEBLOCK", 505_000)),
+    ("Player1 has collected a Inverted Thermos with a chance!", None),
+])
+def test_garbled_chat_names_snap_to_the_blocks_of_their_rarity(line, want):
+    got = [(f.variant, f.block, f.denominator) for f in hud.parse_collects([line])]
+    assert got == ([want] if want else [])
+
+
+def test_a_bare_variant_word_is_not_a_find():
+    assert hud.parse_collects(["Player1 has collected a Inverted with a 1 / 1,000,000 chance!"]) == []
