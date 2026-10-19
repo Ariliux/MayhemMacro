@@ -109,6 +109,7 @@ EXPECTED_DEFAULTS = {
     "alert_variants_always": True,
     "storage_alert": True,
     "afk_bring_to_front": False,
+    "front_hourly": True,
     "afk_variety": True,
     "session_bar": True,
     "bar_rare_min": 10000000,

@@ -324,6 +324,7 @@ class Rig:
         self.settings["center_cursor"] = False
         self.settings["start_jump"] = False
         self.settings["close_esc_menu"] = False   # no Esc presses unless a test asks
+        self.settings["front_hourly"] = False     # no window raising unless a test asks
         self.settings.update(settings)
         self.events: list[dict] = []
         self.deps = Deps(window=self.window, ocr=self.ocr, inputs=self.inputs,
@@ -1937,3 +1938,34 @@ def test_no_vote_search_from_other_screens():
     r.ocr.script["vote_title"] = ["Loading Void...", "There are currently 5 different worlds"]
     r.run(6)
     assert r.engine._vote is None
+
+
+def test_roblox_is_brought_to_the_front_at_the_start():
+    r = Rig(front_hourly=True)
+    r.window.fg = False                              # Discord in front
+    r.start()
+    r.tick()
+    assert "front" in r.window.order and r.window.fg
+    assert any("to the front" in t for t in r.logs("info"))
+
+
+def test_hourly_front_waits_until_you_are_away():
+    r = Rig(front_hourly=True).start()
+    r.tick()                                         # in front at the start: nothing
+    assert "front" not in r.window.order
+    r.window.fg = False
+    r.clock.t += engine_mod.FRONT_EVERY
+    r.clock.touch()                                  # you're typing somewhere else
+    r.tick()
+    assert "front" not in r.window.order
+    r.clock.t += engine_mod.FRONT_IDLE
+    r.tick()
+    assert "front" in r.window.order
+
+
+def test_front_is_left_alone_when_switched_off():
+    r = Rig(front_hourly=False)
+    r.window.fg = False
+    r.start()
+    r.run(5)
+    assert "front" not in r.window.order
