@@ -62,8 +62,9 @@ CHROMA_MERGE = 15 * 60.0    # the chromatic log line only comes minutes after th
 LOG_HOLD = 3.0              # with the screen readable, give the banner this long to beat the log line
 BANNER_PATIENCE = 3.0       # wait this long for a read of a banner that shows its rarity
 SETUP_IDLE = 1.5            # start-of-run setup waits this long after your last input (the F1 press)
+START_PLAY_FOR = 90.0       # a run started on the title screen: look for PLAY this long
 PLAY_EVERY = 1.5            # look for the title screen's PLAY button this often while loading
-MEDAL_DELAY = 2.0           # press the clip key this long after the spawn (so the clip shows it)
+MEDAL_DELAY = 10.0          # press the clip key this long after the detection (the clip shows it)
 MEDAL_GAP = 20.0            # at most one clip this often
 ESC_CHECK_EVERY = 3.0       # look for Roblox's Esc menu this often...
 ESC_HUD_LOST = 6.0          # ...once the game's top bar has been hidden this long
@@ -449,6 +450,7 @@ class Engine:
             return
         self._step("bringing Roblox to the front", self._keep_front, now, st, look)
         self._step("reading the screen", self._screen, now, st, look)
+        self._step("pressing Play", self._start_play, now, look)
         self._step("getting the game ready", self._setup, now, st, look)
         self._step("clipping with Medal", self._medal, now, st, look)
         self._step("closing the Roblox menu", self._esc_menu, now, st, look)
@@ -465,6 +467,7 @@ class Engine:
         self._esc_at = self._esc_pressed_at = _NEVER
         self._title_at = _NEVER
         self._front_at = _NEVER
+        self._start_play_until: float | None = None
         self._clip_at: float | None = None      # when to press the Medal clip key
         self._clip_last = _NEVER
         self._play_at = _NEVER
@@ -1523,7 +1526,7 @@ class Engine:
     def _rejoin(self, now: float, st: dict, look: _Look, disconnects: list[LogEvent]) -> None:
         rj = self._rj
         if rj is not None and rj.phase in ("confirm", "loading"):
-            self._rejoin_follow(now, rj, disconnects)
+            self._rejoin_follow(now, rj, look, disconnects)
             return
 
         dc = self._disconnected(disconnects)
@@ -1611,7 +1614,8 @@ class Engine:
         rj.phase, rj.launched_at = "confirm", now
         self._log("info", "Opened Roblox, waiting for it to join.")
 
-    def _rejoin_follow(self, now: float, rj: _Rejoin, disconnects: list[LogEvent]) -> None:
+    def _rejoin_follow(self, now: float, rj: _Rejoin, look: _Look,
+                       disconnects: list[LogEvent]) -> None:
         """A try is under way: watch the log for the new session."""
         tail = self.deps.tail
         path = getattr(tail, "path", None)
@@ -1641,6 +1645,21 @@ class Engine:
                 except Exception as e:
                     self._error("pressing Play", e)
 
+    def _start_play(self, now: float, look: _Look) -> None:
+        """A run started with Roblox on Block Mayhem's title screen: press its
+        PLAY button too, not only after a rejoin. Only early in the run (or
+        while the game hasn't loaded), so an in-game 'Play' is never clicked."""
+        if self._start_play_until is None:
+            self._start_play_until = now + START_PLAY_FOR
+        if self._rj is not None or self._busy is not None or not look.in_bmx:
+            return
+        if self._timer_at != _NEVER:
+            return                              # the round timer showed: in the game, no title screen
+        loaded = bool(getattr(self.deps.tail, "loaded", True))
+        if loaded and now > self._start_play_until:
+            return
+        self._press_play(now, look)
+
     def _press_play(self, now: float, look: _Look) -> None:
         """Block Mayhem X opens on a title screen: press its PLAY button so the
         game loads (the rejoin waits for that). Only with Roblox in front."""
@@ -1653,7 +1672,7 @@ class Engine:
             return
         try:
             img = w.grab(rect)
-        except OSError:
+        except Exception:                   # the screen step already says when it can't see
             return
         pt = hud.find_play(self.deps.ocr, img)
         if pt and self.deps.inputs.click_at(rect[0] + pt[0], rect[1] + pt[1]):

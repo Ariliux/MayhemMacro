@@ -1864,6 +1864,8 @@ def test_medal_clip_after_a_rare_spawn_at_your_setting():
     assert pressed == []
     r.ocr.script["banner"] = ["Inverted Relic has spawned! (1 / 6,000,000)"]
     r.run(5)
+    assert pressed == []                                                # not yet: 10 s after
+    r.run(int(engine_mod.MEDAL_DELAY / engine_mod.TICK) + 2)
     assert pressed == ["F4"]
     assert any("Medal" in t for t in r.logs("info"))
 
@@ -1969,3 +1971,20 @@ def test_front_is_left_alone_when_switched_off():
     r.start()
     r.run(5)
     assert "front" not in r.window.order
+
+
+def test_play_is_pressed_when_a_run_starts_on_the_title_screen():
+    r = Rig().start()
+    r.ocr.script["timer"] = []                       # the title screen hides the round timer
+    r.ocr.script["client"] = [OcrLine("PLAY", (OcrWord("PLAY", 300, 900, 120, 40),))]
+    r.run(4)
+    assert any("Pressed Play" in t for t in r.logs("info"))
+
+
+def test_play_is_not_looked_for_later_in_a_loaded_game():
+    r = Rig().start()
+    r.run(4)
+    r.clock.t += engine_mod.START_PLAY_FOR + 5
+    r.ocr.script["client"] = [OcrLine("Play", (OcrWord("Play", 300, 900, 120, 40),))]
+    r.run(4)
+    assert not any("Pressed Play" in t for t in r.logs("info"))
