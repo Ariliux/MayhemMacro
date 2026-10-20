@@ -94,14 +94,14 @@ def fix_name(raw: str) -> str:
         keys.setdefault(_key(name), name)
     if k in keys:
         return keys[k]
-    best = difflib.get_close_matches(k, list(keys), n=1, cutoff=0.75)
+    best = difflib.get_close_matches(k, list(keys), n=1, cutoff=0.72)   # 'Urrunescent'
     if best:
         return keys[best[0]]
     # The first letter or two is what OCR gets wrong most ('Plamond' for
     # Diamond): compare the rest of the name too.
-    if len(k) >= 6:
-        rest = {key[1:]: key for key in keys if len(key) >= 6}
-        best = difflib.get_close_matches(k[1:], list(rest), n=1, cutoff=0.82)
+    if len(k) >= 5:                                   # 'Gucjd' -> Lucid
+        rest = {key[1:]: key for key in keys if len(key) >= 5}
+        best = difflib.get_close_matches(k[1:], list(rest), n=1, cutoff=0.75 if len(k) < 6 else 0.82)
         if best:
             return keys[rest[best[0]]]
     return raw
@@ -128,7 +128,22 @@ def by_rarity(raw: str, variant: str, den: int | None) -> str:
     for gk, name in group.items():           # the start of a name reads best
         if gk.startswith(k[:4]):
             return name
+    two = [name for gk, name in group.items() if gk[:2] == k[:2]]
+    if len(two) == 1:                        # 'Lur.i' at 100,000: only Luminescent starts 'Lu'
+        return two[0]
     return fixed
+
+
+def looks_garbled(name: str) -> bool:
+    """An unknown name that is OCR junk ('I-ujtl', 'Wit'', 'S—æwiå'), not a
+    new block: symbols in it, or too few letters. Clean unknown names
+    ('Destiny', 'Frostbite') may be real blocks the table doesn't have yet."""
+    if is_known(name):
+        return False
+    letters = re.sub(r"[^A-Za-z]", "", name)
+    low = letters.lower()
+    return (len(letters) < 4 or bool(re.search(r"[^A-Za-z ]", name)) or low in ("inverted", "chromatic")
+            or (low.startswith("wi") and len(low) <= 5))      # 'Wit'', 'Wiff': the word "with"
 
 
 def is_known(name: str) -> bool:

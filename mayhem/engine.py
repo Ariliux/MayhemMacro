@@ -733,7 +733,7 @@ class Engine:
               source: str, picture: Image.Image | None, key: str) -> None:
         """One rare block sighting -> an alert (or a log line when it is below
         the user's threshold), merged with other sightings of the same block."""
-        if len(re.sub(r"[^A-Za-z]", "", block)) < 3 and not blocks.is_known(block):
+        if blocks.looks_garbled(block):
             return                              # an OCR scrap ('D spawned!'), not a block
         if source == "log_chromatic":
             # Roblox writes this minutes after the block was there, so it can

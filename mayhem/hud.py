@@ -354,7 +354,7 @@ def parse_collects(lines: list[str]) -> list[Find]:
         block, variant = _split_variant(m.group(2).strip())
         read = _number(m.group(3))
         block = blocks.by_rarity(block, variant, read)
-        if block.lower() in ("inverted", "chromatic") or len(re.sub(r"[^A-Za-z]", "", block)) < 3:
+        if block.lower() in ("inverted", "chromatic") or blocks.looks_garbled(block):
             continue                            # the name itself wasn't read
         variant, den = blocks.snap(block, variant, read)
         if den is None:
@@ -387,7 +387,7 @@ def parse_pickup(text: str) -> Find | None:
         return None
     block, variant = _split_variant(m.group(1).strip())
     block = blocks.fix_name(block)
-    if block.lower() in ("inverted", "chromatic") or len(re.sub(r"[^A-Za-z]", "", block)) < 3:
+    if block.lower() in ("inverted", "chromatic") or blocks.looks_garbled(block):
         return None                             # 'picked up a Chromatic' - the name was cut off
     return Find(block, variant, blocks.rarity_of(block, variant), "pickup")
 
