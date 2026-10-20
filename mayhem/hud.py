@@ -328,7 +328,7 @@ def _split_variant(name: str) -> tuple[str, str]:
     if len(words) > 1:
         first = words[0].lower()
         for v in ("chromatic", "inverted"):
-            if difflib.SequenceMatcher(None, first, v).ratio() >= 0.75:
+            if difflib.SequenceMatcher(None, first, v).ratio() >= 0.6:   # 'Invgted', 'gyomatic'
                 return " ".join(words[1:]), v
     # Glued together by OCR: 'Inverte#vergreen' -> ('Evergreen', 'inverted').
     k = re.sub(r"[^a-z]", "", name.lower())
@@ -387,6 +387,8 @@ def parse_pickup(text: str) -> Find | None:
         return None
     block, variant = _split_variant(m.group(1).strip())
     block = blocks.fix_name(block)
+    if block.lower() in ("inverted", "chromatic") or len(re.sub(r"[^A-Za-z]", "", block)) < 3:
+        return None                             # 'picked up a Chromatic' - the name was cut off
     return Find(block, variant, blocks.rarity_of(block, variant), "pickup")
 
 
@@ -546,6 +548,10 @@ def _checked(b: Banner) -> Banner:
     """A parsed banner checked against the block table: the name's OCR typo
     fixed ('Reljc' -> 'Relic') and a misread number snapped to a real one
     ('1 / 250' -> 250,000). Every way a banner is read goes through this."""
+    if b.variant == "normal":                  # a misread 'Inverted'/'Chromatic' left in the name
+        name, v = _split_variant(b.block)
+        if v != "normal":
+            b = replace(b, block=name, variant=v)
     b = replace(b, block=blocks.by_rarity(b.block, b.variant, b.denominator))
     v, d = blocks.snap(b.block, b.variant, b.denominator)
     return replace(b, variant=v, denominator=d)

@@ -504,3 +504,20 @@ def test_garbled_chat_names_snap_to_the_blocks_of_their_rarity(line, want):
 
 def test_a_bare_variant_word_is_not_a_find():
     assert hud.parse_collects(["Player1 has collected a Inverted with a 1 / 1,000,000 chance!"]) == []
+
+
+@pytest.mark.parametrize("text, variant", [
+    ("Invgted Evergreen has spawned! (1 / 1,000,000)", "inverted"),
+    ("Inveryed Evergreen has spawned! (1 / 1,000,000)", "inverted"),
+    ("gyomatic Evergreen has spawned! (1 / 2,500,000)", "chromatic"),
+    ("lhverted Lucid has spawned!", "inverted"),
+])
+def test_misread_variant_words_in_banners(text, variant):
+    b = hud._checked(hud.parse_banner(text))
+    assert (b.block, b.variant) == (b.block if b.block != "Evergreen" else "Evergreen", variant)
+    assert b.block in ("Evergreen", "Lucid")
+
+
+def test_a_pickup_with_no_block_name_is_skipped():
+    assert hud.parse_pickup("You just picked up a Chromatic block!") is None
+    assert hud.parse_pickup("You just picked up a Inverted block!") is None
