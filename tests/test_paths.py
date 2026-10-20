@@ -121,6 +121,7 @@ EXPECTED_DEFAULTS = {
     "medal_clip": False,
     "medal_key": "F4",
     "medal_min": 10000000,
+    "picture_min": 10000000,
     "close_esc_menu": True,
     "keep_awake": True,
     "roll_key": "F8",

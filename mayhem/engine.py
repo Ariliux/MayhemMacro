@@ -773,8 +773,8 @@ class Engine:
         # A picture only for blocks at or above your own rarity setting (not for
         # 'always alert' variants under it, or blocks with no known odds).
         if denom is not None and denom >= _int(st, "rare_min", 0):
-            if picture is not None:
-                self._picture(picture, "rare")
+            if picture is not None and denom >= _int(st, "picture_min", 1):
+                self._picture(picture, "rare")      # saved only for the big ones (10M+): they take space
             if (_flag(st, "medal_clip") and self._clip_at is None
                     and denom >= _int(st, "medal_min", 1)):   # its own, higher bar (10M by default)
                 self._clip_at = now + MEDAL_DELAY

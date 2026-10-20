@@ -985,7 +985,7 @@ RESONANCE = "Resonance has spawned! (1 / 100,000)"
 
 
 def test_banner_becomes_a_rare_event_with_a_picture():
-    r = Rig(save_pictures=True).start()
+    r = Rig(save_pictures=True, picture_min=1).start()
     r.ocr.script["banner"] = [RESONANCE]
     r.tick()
     [ev] = r.of("rare")
@@ -1841,7 +1841,7 @@ def test_anti_afk_variety_mixes_jumps_double_jumps_and_clicks():
 
 
 def test_pictures_only_for_rares_at_your_setting_and_problems():
-    r = Rig(rare_min=1_000_000, save_pictures=True).start()
+    r = Rig(rare_min=1_000_000, save_pictures=True, picture_min=1).start()
     r.ocr.script["banner"] = ["Inverted Relic has spawned! (1 / 6,000,000)"]
     r.tick()
     r.ocr.script["banner"] = ["Chromatic Opal has spawned! (1 / 250,000)"]   # alerts (variant) but under 1M
@@ -2003,3 +2003,13 @@ def test_junk_banner_names_are_not_rares():
     r.ocr.script["banner"] = ["D has spawned!"]
     r.run(4)
     assert not r.of("rare")
+
+
+def test_rare_pictures_are_saved_only_for_10m_and_rarer():
+    r = Rig(save_pictures=True, rare_min=100_000).start()
+    r.ocr.script["banner"] = ["Relic has spawned! (1 / 600,000)"]
+    r.run(4)
+    assert not [s for s in r.pictures if s[1] == "rare"]
+    r.ocr.script["banner"] = ["Inverted Ignityx has spawned! (1 / 100,000,000)"]
+    r.run(4)
+    assert [s for s in r.pictures if s[1] == "rare"]
