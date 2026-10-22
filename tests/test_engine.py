@@ -1403,7 +1403,7 @@ def test_auto_vote_off_never_looks_for_the_vote():
     r = Rig(auto_vote=False).start()
     VoteScreen(r, ("Void", "Ocean"), in_secs=8)
     r.run(30)
-    assert "client" not in r.ocr.reads and r.inputs.clicks() == []
+    assert r.inputs.clicks() == [] and not any("Vote screen" in x for x in r.logs("info"))
 
 
 def test_one_vote_search_per_vote():
@@ -1978,13 +1978,22 @@ def test_play_is_pressed_when_a_run_starts_on_the_title_screen():
     assert any("Pressed Play" in t for t in r.logs("info"))
 
 
-def test_play_is_not_looked_for_later_in_a_loaded_game():
+def test_play_is_not_looked_for_while_the_round_timer_shows():
     r = Rig().start()
-    r.run(4)
-    r.clock.t += engine_mod.START_PLAY_FOR + 5
+    r.ocr.script["timer"] = ["05:00"]
     r.ocr.script["client"] = [OcrLine("Play", (OcrWord("Play", 300, 900, 120, 40),))]
-    r.run(4)
+    r.run(int(engine_mod.PLAY_HUD_GONE / engine_mod.TICK) + 10)    # timer on screen the whole time
     assert not any("Pressed Play" in t for t in r.logs("info"))
+
+
+def test_play_is_pressed_on_a_title_screen_long_after_the_start():
+    """A rejoin that 'loaded' before the title screen came up: PLAY waits."""
+    r = Rig().start()
+    r.run(20)                                        # in the game, timer seen
+    r.ocr.script["timer"] = []                       # title screen: no round timer
+    r.ocr.script["client"] = [OcrLine("PIAY", (OcrWord("PIAY", 300, 900, 120, 40),))]
+    r.run(int(engine_mod.PLAY_HUD_GONE / engine_mod.TICK) + 10)
+    assert any("Pressed Play" in t for t in r.logs("info"))
 
 
 def test_a_rare_seen_only_in_the_chat_is_clipped_too():

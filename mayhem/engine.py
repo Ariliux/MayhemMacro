@@ -62,7 +62,7 @@ CHROMA_MERGE = 15 * 60.0    # the chromatic log line only comes minutes after th
 LOG_HOLD = 3.0              # with the screen readable, give the banner this long to beat the log line
 BANNER_PATIENCE = 3.0       # wait this long for a read of a banner that shows its rarity
 SETUP_IDLE = 1.5            # start-of-run setup waits this long after your last input (the F1 press)
-START_PLAY_FOR = 90.0       # a run started on the title screen: look for PLAY this long
+PLAY_HUD_GONE = 20.0        # round timer gone this long: maybe the title screen - look for PLAY
 PLAY_EVERY = 1.5            # look for the title screen's PLAY button this often while loading
 MEDAL_DELAY = 10.0          # press the clip key this long after the detection (the clip shows it)
 CLIP_SAME = 600.0           # the same block isn't clipped again (spawn, then its pickup) this soon
@@ -468,7 +468,6 @@ class Engine:
         self._esc_at = self._esc_pressed_at = _NEVER
         self._title_at = _NEVER
         self._front_at = _NEVER
-        self._start_play_until: float | None = None
         self._clipped: dict[str, float] = {}
         self._clip_at: float | None = None      # when to press the Medal clip key
         self._clip_last = _NEVER
@@ -1659,18 +1658,16 @@ class Engine:
                     self._error("pressing Play", e)
 
     def _start_play(self, now: float, look: _Look) -> None:
-        """A run started with Roblox on Block Mayhem's title screen: press its
-        PLAY button too, not only after a rejoin. Only early in the run (or
-        while the game hasn't loaded), so an in-game 'Play' is never clicked."""
-        if self._start_play_until is None:
-            self._start_play_until = now + START_PLAY_FOR
+        """Block Mayhem's title screen hides the round timer. Roblox says the
+        game has loaded BEFORE that screen shows, so a rejoin can look done
+        while PLAY still waits (a whole night went blind like that). So any
+        time the timer has been gone a while - at the start, after a rejoin,
+        whenever - look for PLAY and press it. Only a line that says just
+        'Play' is ever clicked."""
         if self._rj is not None or self._busy is not None or not look.in_bmx:
             return
-        if self._timer_at != _NEVER:
-            return                              # the round timer showed: in the game, no title screen
-        loaded = bool(getattr(self.deps.tail, "loaded", True))
-        if loaded and now > self._start_play_until:
-            return
+        if now - self._timer_at < PLAY_HUD_GONE:
+            return                              # the round timer is there: in the game
         self._press_play(now, look)
 
     def _press_play(self, now: float, look: _Look) -> None:

@@ -422,12 +422,16 @@ def esc_menu_open(ocr: Ocr, client: Image.Image) -> bool:
     return "resume" in text and ("leave" in text or "reset" in text or "respawn" in text)
 
 
+_PLAY_FOLD = str.maketrans({"i": "l", "1": "l", "|": "l", "!": "l", "v": "y", "0": "a"})
+
+
 def find_play(ocr: Ocr, client: Image.Image) -> tuple[int, int] | None:
     """The title screen's PLAY button: a line that says just 'Play' (never
     quest text like 'Play for 30 Minutes!'). Client pixels of its centre."""
     best = None
     for ln in ocr.read(client, 1.0):
-        if ln.text.strip().strip("!>▶ ").lower() != "play" or not ln.words:
+        word = ln.text.strip().strip("!>▶ ").lower().translate(_PLAY_FOLD)
+        if word != "play" or not ln.words:     # 'PIAY', 'P1AY', 'PLAV' are the same button
             continue
         w = max(ln.words, key=lambda w: w.h)
         if best is None or w.h > best[2]:
