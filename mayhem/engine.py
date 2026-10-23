@@ -113,8 +113,8 @@ VOTE_RECHECK = 2.0          # after a click, look again this much later
 VOTE_COOLDOWN = 90.0        # no new vote search this soon after one ended
 VOTE_SCALE = 1.25           # whole-client OCR: 1.0-1.5 keeps it under ~250 ms
 VOTE_MISSES = 3             # click_at said no this often: give up on this vote
-FRONT_EVERY = 3600.0        # bring Roblox to the front this often (and at the start)
-FRONT_IDLE = 60.0           # ...the hourly one only with you away from the keys this long
+FRONT_RETRY = 120.0         # Roblox covered: bring it to the front at most this often...
+FRONT_IDLE = 60.0           # ...and only with you away from the keys this long (not at the start)
 VOTE_TITLE_AFTER = 2.0      # round timer gone this long: look for the vote screen itself
 VOTE_TITLE_EVERY = 2.0      # ...this often
 VOTE_NOTE = 180.0           # a world change this soon after voting mentions the vote
@@ -1280,26 +1280,27 @@ class Engine:
     # -- Roblox in front -------------------------------------------------------------
     def _keep_front(self, now: float, st: dict, look: _Look) -> None:
         """The macro only sees the game with Roblox in front (a 2B went unseen
-        behind Discord for 7 hours). At the start of a run, and then every
-        hour, bring it forward if something covers it. The hourly one waits
-        until you've left the keys, so it never jumps over your typing."""
+        behind Discord for 7 hours, a run sat paused all night). At the start
+        of a run, and whenever something covers it after that, bring it
+        forward - after the start only once you've left the keys a minute,
+        so it never jumps over your typing."""
         if not _flag(st, "front_hourly") or not look.hwnd:
             return
         if self._busy is not None or self._rj is not None:
             return
         first = self._front_at == _NEVER
-        if not first and now - self._front_at < FRONT_EVERY:
-            return
         if look.fg and not look.minimized:
-            self._front_at = now                # already in front: nothing to do
+            if first:
+                self._front_at = now - FRONT_RETRY      # in front at the start: nothing to do
             return
-        if not first and look.user_idle < FRONT_IDLE:
-            return                              # you're using the PC: wait until you're away
+        if not first:
+            if look.user_idle < FRONT_IDLE:
+                return                          # you're using the PC: wait until you're away
+            if now - self._front_at < FRONT_RETRY:
+                return
+        self._front_at = now
         if self.deps.window.bring_to_front(look.hwnd):
-            self._front_at = now
             self._log("info", "Brought Roblox to the front so the macro can see the game.")
-        else:
-            self._front_at = now - FRONT_EVERY + 60.0   # try again in a minute
 
     # -- the vote screen, seen directly ---------------------------------------------
     def _vote_title(self, now: float, st: dict, look: _Look) -> None:

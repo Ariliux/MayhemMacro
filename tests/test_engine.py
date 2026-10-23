@@ -1948,18 +1948,17 @@ def test_roblox_is_brought_to_the_front_at_the_start():
     assert any("to the front" in t for t in r.logs("info"))
 
 
-def test_hourly_front_waits_until_you_are_away():
+def test_covered_roblox_comes_back_once_you_are_away():
     r = Rig(front_hourly=True).start()
     r.tick()                                         # in front at the start: nothing
     assert "front" not in r.window.order
-    r.window.fg = False
-    r.clock.t += engine_mod.FRONT_EVERY
+    r.window.fg = False                              # Discord pops over it
     r.clock.touch()                                  # you're typing somewhere else
     r.tick()
     assert "front" not in r.window.order
-    r.clock.t += engine_mod.FRONT_IDLE
+    r.clock.t += engine_mod.FRONT_IDLE + 1
     r.tick()
-    assert "front" in r.window.order
+    assert "front" in r.window.order and r.window.fg
 
 
 def test_front_is_left_alone_when_switched_off():

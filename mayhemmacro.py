@@ -3535,9 +3535,9 @@ class MayhemMacro(ctk.CTk):
             on=s.get("afk_bring_to_front") is True,
             command=lambda: self._switch_saved("afk_bring_to_front", self.sw_front))
         self.sw_front_hourly = self._switch_row(
-            card, "Bring Roblox to the front every hour",
-            "At the start of a run and then every hour, if another window covers "
-            "it. The macro can't see the game behind other windows.",
+            card, "Keep Roblox in front",
+            "At the start of a run, and whenever another window covers it while "
+            "you're away. The macro can't see the game behind other windows.",
             on=s.get("front_hourly", True) is True,
             command=lambda: self._switch_saved("front_hourly", self.sw_front_hourly))
         ctk.CTkLabel(sp, text="Rejoin only ever closes and opens Roblox, and "
