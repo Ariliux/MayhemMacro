@@ -236,12 +236,14 @@ def display_scaling() -> int:
 
 
 def keep_awake(on: bool) -> bool:
-    """While a run is going, stop Windows going to sleep - a sleeping PC ends
-    an AFK session for good. Only the PC; the screen may still turn off.
+    """While a run is going, keep the PC awake AND the screen on. A sleeping
+    PC ends an AFK session for good, and with the screen off Windows stops
+    drawing it: the macro (and Medal) only see a frozen picture - no banners,
+    no chat, no vote, no PLAY (a whole night and a 2B were lost like that).
     Per thread, so call it from the Tk thread. Never while testing."""
     try:
         safety.guard("keep the PC awake")
-        flags = 0x80000000 | (0x00000001 if on else 0)  # CONTINUOUS | SYSTEM
+        flags = 0x80000000 | (0x00000003 if on else 0)  # CONTINUOUS | SYSTEM | DISPLAY
         return bool(ctypes.windll.kernel32.SetThreadExecutionState(flags))
     except Exception:
         return False
@@ -4639,9 +4641,9 @@ class MayhemMacro(ctk.CTk):
         card = self._card(sp, corner_radius=14)
         card.pack(fill="x")
         self.sw_awake = self._switch_row(
-            card, "Keep the PC awake",
-            "Stops Windows going to sleep during a run. The screen can still "
-            "turn off.", first=True, on=s.get("keep_awake", True) is True,
+            card, "Keep the PC and screen awake",
+            "During a run: no sleep, and the screen stays on. With the screen off "
+            "the macro can't see the game.", first=True, on=s.get("keep_awake", True) is True,
             command=self._awake_switched)
         self.sw_bar = self._switch_row(
             card, "Session bar on top of Roblox",
