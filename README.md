@@ -55,7 +55,7 @@ something rare shows up.
 
 ## Installing it
 
-1. Go to **[Releases](../../releases/latest)** and download `MayhemMacro-v1.0.2.zip`.
+1. Go to **[Releases](../../releases/latest)** and download `MayhemMacro-v1.0.3.zip`.
    Only get it from here, not from random re-uploads.
 2. Right-click the zip → **Extract All**. Don't run it from inside the zip.
 3. Open the folder and run **`MayhemMacro.exe`**.
