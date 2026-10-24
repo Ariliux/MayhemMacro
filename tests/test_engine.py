@@ -2021,3 +2021,28 @@ def test_rare_pictures_are_saved_only_for_10m_and_rarer():
     r.ocr.script["banner"] = ["Inverted Ignityx has spawned! (1 / 100,000,000)"]
     r.run(4)
     assert [s for s in r.pictures if s[1] == "rare"]
+
+
+def test_a_spawn_named_in_the_roblox_log_alerts_with_its_variant():
+    """Works with the screen off: Roblox logs broken textures of new blocks."""
+    from mayhem import robloxlog
+    ev = robloxlog.parse_line(
+        '2026-10-24T04:51:00.889Z,5847.889160,7340,6 [FLog::Error] Asset (Image) "https://x" '
+        'load failed in Workspace.Blocks.ignityx_chromatic.Base.core.core vfx.vfx.corefire.Texture: x')
+    assert ev is not None and (ev.kind, ev.value) == ("block_spawn", "ignityx_chromatic")
+    assert robloxlog.parse_line("2026-10-24T04:51:00.889Z,1,2,6 [FLog::Error] Workspace.Blocks.Board.Main.List") is not None
+
+
+def test_a_log_named_spawn_becomes_a_rare_with_no_screen_at_all():
+    r = Rig(rare_min=1_000_000).start()
+    r.window.fg = False                                  # screen useless: only the log
+    r.tail.feed(line('Asset (Image) "https://x" load failed in '
+                     'Workspace.Blocks.ignityx_chromatic.Base.core.core vfx: x', "FLog::Error"))
+    r.tail.feed(line('Asset (Image) "https://x" load failed in '
+                     'Workspace.Blocks.ignityx_chromatic.Base.core.core vfx: y', "FLog::Error"))
+    r.run(int(engine_mod.LOG_HOLD / engine_mod.TICK) + 4)
+    [ev] = r.of("rare")
+    assert (ev["block"], ev["variant"], ev["denominator"]) == ("Ignityx", "chromatic", 250_000_000)
+    r.tail.feed(line("x in Workspace.Blocks.Board.Main.List", "FLog::Error"))   # not a block
+    r.run(10)
+    assert len(r.of("rare")) == 1

@@ -45,6 +45,12 @@ _JOIN_RE = re.compile(r"! Joining game '[^']*' place (\d+)")
 # a music block (sporedelic_song); anything else is the world's own music
 # (Dreamland, Arctic). Overworld, Void and Cave have none, so they print nothing.
 _SONG_RE = re.compile(r"Could not find song group for sound (.+?)\s*$")
+# A block that just spawned into the world and has a broken texture or script
+# names itself: '... load failed in Workspace.Blocks.ignityx.Base.core...',
+# 'Workspace.Blocks.eruption_chromatic.Base.BlockScript'. Only some blocks do
+# (Luminescent, Bubbly, Relic, Ignityx, Atonion, Borealis, Eruption...), but it
+# needs no screen at all.
+_SPAWN_RE = re.compile(r"\bWorkspace\.Blocks\.([A-Za-z0-9_]+)\.")
 # Printed when a chromatic block's colour loop ends, so it comes minutes AFTER
 # the block was there. 'nil_chromatic' is real too (the block was already gone).
 _CHROMA_RE = re.compile(r"\[Chromatic\] Thread stopped for block: (.+?)_chromatic\b",
@@ -133,6 +139,9 @@ def _classify(channel: str, msg: str) -> tuple[str, str] | None:
     m = _CHROMA_RE.search(msg)
     if m:
         return "chromatic", m.group(1).strip()
+    m = _SPAWN_RE.search(msg)
+    if m:
+        return "block_spawn", m.group(1)
     m = _IDLE_RE.search(msg)
     if m:
         return "idle", m.group(1)

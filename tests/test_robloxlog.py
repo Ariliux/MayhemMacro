@@ -22,7 +22,7 @@ HAVE_LOGS = bool(glob.glob(os.path.join(LOGS, "*_Player_*_last.log")))
 needs_logs = pytest.mark.skipif(not HAVE_LOGS, reason="the real Roblox logs are local only")
 OTHER_GAME = "15532962292"
 KINDS = {"join", "entered", "loaded", "left", "disconnect", "rare_song",
-         "world_music", "chromatic", "idle"}
+         "world_music", "chromatic", "idle", "block_spawn"}
 
 
 def fixture(tag: str) -> str:
@@ -47,7 +47,8 @@ def values(evs: list[LogEvent], kind: str) -> list[str]:
 
 
 def kinds(evs: list[LogEvent]) -> list[str]:
-    return [ev.kind for ev in evs]
+    """The session's story; block spawns (many, any time) are tested on their own."""
+    return [ev.kind for ev in evs if ev.kind != "block_spawn"]
 
 
 def line(msg: str, level: str = "") -> str:
@@ -326,7 +327,8 @@ def test_appended_lines_and_a_half_written_line(tmp_path):
 
     add(path, "\n".join(src[upto:end]) + "\n")
     got = tail.poll()
-    assert [(e.kind, e.value) for e in got] == [("chromatic", "vulcan")]
+    assert [(e.kind, e.value) for e in got if e.kind != "block_spawn"] == [("chromatic", "vulcan")]
+    got = [e for e in got if e.kind != "block_spawn"]
     assert got[0].log == name and got[0].utc == "01:46:26"
     assert tail.poll() == []
 
@@ -502,3 +504,10 @@ def test_every_fixture_streamed_through_the_tail_matches_the_parser(tmp_path):
         assert [(e.kind, e.value, e.utc) for e in got] == want
         assert all(e.log == name for e in got)
         assert tail.path == path
+
+
+def test_block_spawns_are_in_the_real_logs():
+    """Broken textures name freshly spawned blocks: a spawn signal with no screen."""
+    found = [ev.value for tag in ("78728", "F2E68", "EFD9F", "CBA41", "F5605")
+             for ev in events(tag) if ev.kind == "block_spawn"]
+    assert found and all(v and v.replace("_", "").isalnum() for v in found)

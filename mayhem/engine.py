@@ -626,6 +626,8 @@ class Engine:
                 self._on_song(now, st, ev.value)
             elif kind == "chromatic":
                 self._on_chromatic(now, st, ev.value)
+            elif kind == "block_spawn":
+                self._on_block_log(now, st, ev.value)
         return disconnects
 
     def _new_session(self, now: float, st: dict) -> None:
@@ -699,6 +701,23 @@ class Engine:
         if self._voted and now - self._voted[0] <= VOTE_NOTE:
             text += f" You voted {self._voted[1]}."
         self._log("info", text)
+
+    def _on_block_log(self, now: float, st: dict, raw: str) -> None:
+        """'ignityx', 'eruption_chromatic': a spawn named in Roblox's log. Like
+        a music block: held a moment so a banner with a picture can take over."""
+        base, variant = raw, "normal"
+        for v in ("inverted", "chromatic"):
+            if raw.lower().endswith("_" + v):
+                base, variant = raw[:-len(v) - 1], v
+        if not blocks.rarity(base):
+            return                              # not a block we know ('Board', ...)
+        name = blocks.display_name(base)
+        key = _key(name)
+        if not key or key in self._log_wait:
+            return                              # one spawn writes 2-3 lines
+        self._log_wait[key] = (now + LOG_HOLD, dict(
+            block=name, denom=blocks.rarity_of(base, variant), variant=variant,
+            source="log_song", picture=None, key=key))
 
     def _on_song(self, now: float, st: dict, raw: str) -> None:
         name = blocks.display_name(raw)
