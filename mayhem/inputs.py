@@ -307,6 +307,19 @@ def tap_scan(scan: int, hold: float = 0.03) -> bool:
     return _hold(scan, hold)
 
 
+def nudge() -> bool:
+    """Wiggle the mouse 1 pixel and back (relative moves, Roblox in front only):
+    wakes a screen that turned off. False if Roblox isn't in front."""
+    safety.guard("SendInput")
+    hwnd = _roblox_front()
+    if not hwnd:
+        return False
+    move = _move_rel_in(hwnd)
+    ok = move(1, 0)
+    time.sleep(0.05)
+    return bool(move(-1, 0) and ok)
+
+
 def move_to(x: int, y: int) -> bool:
     """Walk the cursor to screen pixel x, y with RELATIVE moves.
 

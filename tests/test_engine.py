@@ -2046,3 +2046,31 @@ def test_a_log_named_spawn_becomes_a_rare_with_no_screen_at_all():
     r.tail.feed(line("x in Workspace.Blocks.Board.Main.List", "FLog::Error"))   # not a block
     r.run(10)
     assert len(r.of("rare")) == 1
+
+
+def test_a_frozen_picture_wakes_the_screen_with_a_mouse_wiggle():
+    r = Rig().start()
+    nudged = []
+    r.inputs.nudge = lambda: nudged.append(r.clock.t) or True
+    t0 = r.clock.t
+
+    def until(secs):
+        while r.clock.t - t0 < secs:
+            r.tick()
+    until(engine_mod.FROZEN_AFTER / 2)
+    assert nudged == []                              # not frozen long enough yet
+    until(engine_mod.FROZEN_AFTER + 20)
+    assert len(nudged) == 1
+    assert any("picture froze" in t for t in r.logs("warn"))
+    until(engine_mod.FROZEN_AFTER + engine_mod.FROZEN_NUDGE_EVERY - 20)
+    assert len(nudged) == 1                          # not again right away
+
+
+def test_no_wiggle_while_you_use_the_pc():
+    r = Rig().start()
+    nudged = []
+    r.inputs.nudge = lambda: nudged.append(1) or True
+    for _ in range(int((engine_mod.FROZEN_AFTER + 60) / engine_mod.TICK)):
+        r.clock.touch()                              # you're typing
+        r.tick()
+    assert nudged == []

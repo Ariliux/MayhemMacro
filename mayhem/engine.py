@@ -65,6 +65,8 @@ SETUP_IDLE = 1.5            # start-of-run setup waits this long after your last
 PLAY_HUD_GONE = 20.0        # round timer gone this long: maybe the title screen - look for PLAY
 PLAY_EVERY = 1.5            # look for the title screen's PLAY button this often while loading
 MEDAL_DELAY = 10.0          # press the clip key this long after the detection (the clip shows it)
+FROZEN_AFTER = 180.0        # the picture hasn't changed this long: the screen is off or frozen
+FROZEN_NUDGE_EVERY = 300.0  # wiggle the mouse to wake it at most this often
 CLIP_SAME = 600.0           # the same block isn't clipped again (spawn, then its pickup) this soon
 MEDAL_GAP = 20.0            # at most one clip this often
 ESC_CHECK_EVERY = 3.0       # look for Roblox's Esc menu this often...
@@ -469,6 +471,8 @@ class Engine:
         self._title_at = _NEVER
         self._front_at = _NEVER
         self._clipped: dict[str, float] = {}
+        self._frame_sig: bytes | None = None
+        self._frame_same_since = self._nudged_at = _NEVER
         self._clip_at: float | None = None      # when to press the Medal clip key
         self._clip_last = _NEVER
         self._play_at = _NEVER
@@ -1037,6 +1041,7 @@ class Engine:
                 self._log("warn", "Can't see the Roblox window right now (is the PC locked?).")
             return
         self._blind_noted = False
+        self._frozen_check(now, look, img)
         if v is not None:
             self._vote_tick(now, st, look, rect, img)
             self._banner_waited(now, st)
@@ -1295,6 +1300,35 @@ class Engine:
         if ok:
             self._esc_pressed_at = now
             self._log("info", "Closed the Roblox menu (Esc) so the macro can see the game.")
+
+    # -- the screen turned off: the picture stops changing --------------------------
+    def _frozen_check(self, now: float, look: _Look, img: Image.Image) -> None:
+        """With the screen off, Windows stops drawing it and every grab is the
+        same frozen picture (whole nights went blind like that, Medal clips
+        froze too). The game itself always moves, so a picture that hasn't
+        changed for minutes means the screen is off: wiggle the mouse a pixel
+        to wake it - only with you away from the keys."""
+        try:
+            sig = img.resize((64, 36), Image.NEAREST).convert("L").tobytes()   # cheap: ~2k pixels
+        except Exception:
+            return
+        old, self._frame_sig = self._frame_sig, sig
+        if old is None or len(old) != len(sig) or \
+                sum(abs(a - b) for a, b in zip(sig, old)) > len(sig) * 2:
+            self._frame_same_since = now        # the picture moved: all good
+            return
+        if now - self._frame_same_since < FROZEN_AFTER or now - self._nudged_at < FROZEN_NUDGE_EVERY:
+            return
+        if self._busy is not None or self._rj is not None or not self._input_ok(look):
+            return
+        nudge = getattr(self.deps.inputs, "nudge", None)
+        if nudge is None:
+            return
+        self._nudged_at = now
+        if nudge():
+            self._frame_same_since = now
+            self._log("warn", "The screen picture froze (the screen was probably off) - "
+                              "wiggled the mouse to wake it.")
 
     # -- Roblox in front -------------------------------------------------------------
     def _keep_front(self, now: float, st: dict, look: _Look) -> None:

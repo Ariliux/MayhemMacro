@@ -144,7 +144,7 @@ def test_own_user32_handle_not_the_shared_one():
 
 # ----------------------------------------------------------------- guard ---
 def test_public_functions_are_the_contract():
-    assert set(_public_functions()) == {"press_space", "tap_scan", "move_to", "click_at", "press_keys"}
+    assert set(_public_functions()) == {"press_space", "tap_scan", "move_to", "click_at", "press_keys", "nudge"}
 
 
 @pytest.mark.parametrize("name", ["press_space", "tap_scan", "move_to", "click_at", "press_keys"])
@@ -171,7 +171,7 @@ def test_guard_names_sendinput(sandbox, monkeypatch):
     for fn in _public_functions().values():
         with pytest.raises(SideEffectBlocked):
             _dummy_call(fn)
-    assert seen == ["SendInput"] * 5
+    assert seen == ["SendInput"] * 6
     assert sandbox.user32.calls == []
 
 
