@@ -322,6 +322,33 @@ _COLLECT = re.compile(r"([A-Za-z0-9_]{3,20})\s+has\s+co[l1I]{2}ected\s+an?\s+"
 _PICKUP = re.compile(r"just\s+pi\w*\s+up\s+an?\s+(.+?)\s+\w*lo\w*k\b", re.I)
 
 
+_FILLER = ("a", "an", "the", "your")
+_TIERS = ("common", "uncommon", "rare", "epic", "legendary", "mythical", "mythic", "divine",
+          "secret", "exotic", "celestial", "godly", "ancient", "special", "unique")
+
+
+def _clean_name(name: str, variant: str) -> tuple[str, str]:
+    """'Inverted a Legendar Diamond' -> ('Diamond', 'inverted'): drop 'a/an/your'
+    and rarity-tier words the game puts in some banners, and take a variant
+    word from anywhere in the name. Names already known come back as they are."""
+    if blocks.is_known(name) and blocks.fix_name(name).lower() == name.lower():
+        return name, variant                    # exactly a block name already
+    kept = []
+    for w in name.split():
+        lw = re.sub(r"[^a-z]", "", w.lower())
+        if not lw or lw in _FILLER:
+            continue
+        if any(difflib.SequenceMatcher(None, lw, t).ratio() >= 0.8 for t in _TIERS):
+            continue
+        hit = next((v for v in ("inverted", "chromatic")
+                    if difflib.SequenceMatcher(None, lw, v).ratio() >= 0.75), None)
+        if hit:
+            variant = variant if variant != "normal" else hit
+            continue
+        kept.append(w)
+    return " ".join(kept), variant              # '' = only filler/variant words: no name read
+
+
 def _split_variant(name: str) -> tuple[str, str]:
     """'Chromatic Mosaic' -> ('Mosaic', 'chromatic'); OCR'd 'cnromatic' too."""
     words = name.split()
@@ -352,6 +379,7 @@ def parse_collects(lines: list[str]) -> list[Find]:
     out = []
     for m in _COLLECT.finditer(text):
         block, variant = _split_variant(m.group(2).strip())
+        block, variant = _clean_name(block, variant)
         read = _number(m.group(3))
         block = blocks.by_rarity(block, variant, read)
         if block.lower() in ("inverted", "chromatic") or blocks.looks_garbled(block):
@@ -556,6 +584,8 @@ def _checked(b: Banner) -> Banner:
         name, v = _split_variant(b.block)
         if v != "normal":
             b = replace(b, block=name, variant=v)
+    name, v = _clean_name(b.block, b.variant)  # 'a Legendary Diamond'
+    b = replace(b, block=name, variant=v)
     b = replace(b, block=blocks.by_rarity(b.block, b.variant, b.denominator))
     v, d = blocks.snap(b.block, b.variant, b.denominator)
     return replace(b, variant=v, denominator=d)

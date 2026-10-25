@@ -521,3 +521,13 @@ def test_misread_variant_words_in_banners(text, variant):
 def test_a_pickup_with_no_block_name_is_skipped():
     assert hud.parse_pickup("You just picked up a Chromatic block!") is None
     assert hud.parse_pickup("You just picked up a Inverted block!") is None
+
+
+@pytest.mark.parametrize("text, want", [
+    ("Inverted a Legendar Diamond has spawned! (1 / 100,000)", ("Diamond", "inverted", 1_000_000)),
+    ("A Legendary Ignityx has spawned! (1 / 10,000,000)", ("Ignityx", "normal", 10_000_000)),
+    ("Mythical Chromatic Relic has spawned!", ("Relic", "chromatic", None)),   # no number on screen
+])
+def test_rarity_words_in_banners_are_dropped(text, want):
+    b = hud._checked(hud.parse_banner(text))
+    assert (b.block, b.variant, b.denominator) == want
