@@ -2074,3 +2074,23 @@ def test_no_wiggle_while_you_use_the_pc():
         r.clock.touch()                              # you're typing
         r.tick()
     assert nudged == []
+
+
+def test_a_failed_medal_press_is_retried_and_reported():
+    r = Rig(medal_clip=True, medal_key="F4", medal_min=1_000_000, rare_min=1_000_000).start()
+    tries = []
+    r.inputs.press_keys = lambda k: (tries.append(k), len(tries) >= 3)[1]   # fails twice, then works
+    r.ocr.script["banner"] = ["Inverted Relic has spawned! (1 / 6,000,000)"]
+    r.run(int((engine_mod.MEDAL_DELAY + 5) / engine_mod.TICK))
+    assert len(tries) == 3 and any("Clipped it with Medal" in t for t in r.logs("info"))
+
+
+def test_two_rares_close_together_both_get_clipped():
+    r = Rig(medal_clip=True, medal_key="F4", medal_min=1_000_000, rare_min=1_000_000).start()
+    pressed = []
+    r.inputs.press_keys = lambda k: pressed.append(r.clock.t) or True
+    r.ocr.script["banner"] = ["Inverted Relic has spawned! (1 / 6,000,000)"]
+    r.run(int((engine_mod.MEDAL_DELAY + 2) / engine_mod.TICK))
+    r.ocr.script["banner"] = ["Ignityx has spawned! (1 / 10,000,000)"]
+    r.run(int((engine_mod.MEDAL_DELAY + engine_mod.MEDAL_GAP + 5) / engine_mod.TICK))
+    assert len(pressed) == 2 and pressed[1] - pressed[0] >= engine_mod.MEDAL_GAP

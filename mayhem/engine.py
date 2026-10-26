@@ -68,6 +68,7 @@ MEDAL_DELAY = 10.0          # press the clip key this long after the detection (
 FROZEN_AFTER = 180.0        # the picture hasn't changed this long: the screen is off or frozen
 FROZEN_NUDGE_EVERY = 300.0  # wiggle the mouse to wake it at most this often
 CLIP_SAME = 600.0           # the same block isn't clipped again (spawn, then its pickup) this soon
+MEDAL_TRY = 15.0            # keep trying to press the clip key this long after it's due
 MEDAL_GAP = 20.0            # at most one clip this often
 ESC_CHECK_EVERY = 3.0       # look for Roblox's Esc menu this often...
 ESC_HUD_LOST = 6.0          # ...once the game's top bar has been hidden this long
@@ -1388,15 +1389,21 @@ class Engine:
         due = self._clip_at
         if due is None or now < due:
             return
-        if now - self._clip_last < MEDAL_GAP or now - due > 15:
+        key = str(st.get("medal_key") or "F4")
+        if now - self._clip_last < MEDAL_GAP:
+            # Two rares close together: wait for the gap instead of dropping it.
+            self._clip_at = self._clip_last + MEDAL_GAP
+            return
+        if now - due > MEDAL_TRY:
             self._clip_at = None
+            self._log("warn", f"Couldn't clip with Medal ({key}): Roblox wasn't in front "
+                              "or you were using the PC.")
             return
         if not look.readable or self._busy is not None or not self._input_ok(look):
-            return
+            return                              # keep trying until MEDAL_TRY runs out
         press = getattr(self.deps.inputs, "press_keys", None)
-        key = str(st.get("medal_key") or "F4")
-        self._clip_at = None
         if press is not None and press(key):
+            self._clip_at = None
             self._clip_last = now
             self._log("info", f"Clipped it with Medal ({key}).")
 
