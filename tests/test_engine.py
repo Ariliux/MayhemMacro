@@ -2094,3 +2094,30 @@ def test_two_rares_close_together_both_get_clipped():
     r.ocr.script["banner"] = ["Ignityx has spawned! (1 / 10,000,000)"]
     r.run(int((engine_mod.MEDAL_DELAY + engine_mod.MEDAL_GAP + 5) / engine_mod.TICK))
     assert len(pressed) == 2 and pressed[1] - pressed[0] >= engine_mod.MEDAL_GAP
+
+
+def test_new_lines_start_in_a_sliding_chat():
+    f = engine_mod._new_lines_start
+    assert f([], ["a", "b"]) == 0                              # nothing read yet: all new
+    assert f(["a", "b"], ["a", "b"]) == 2                      # the same lines again: nothing new
+    assert f(["a", "b"], ["a", "b", "c"]) == 2                 # one new line at the bottom
+    assert f(["x", "a", "b"], ["b", "c", "d"]) == 1            # scrolled: b old, c d new
+    assert f(["a", "b", "c"], ["Q", "b", "c", "d"]) == 3       # top line misread, d new
+    assert f(["a", "a"], ["a", "a", "a"]) == 2                 # the same block collected again
+
+
+def test_old_chat_lines_shown_again_are_not_new_finds():
+    r = Rig().start()
+    r.tail.player = "RealAriliux"
+    r.run(2)
+    line = "RealAriliux has collected a Mercury with a 1 / 100,000,000 chance!"
+    r.ocr.script["chat"] = [line]
+    r.run(4)
+    assert len([t for t in r.logs("info") if "Collected Mercury" in t]) == 1
+    r.ocr.script["chat"] = []                                  # the chat faded out
+    r.clock.t += engine_mod.FIND_QUIET + 60
+    r.run(4)
+    r.ocr.script["chat"] = [line, "RealAriliux has collected a Nova with a 1 / 100,000 chance!"]
+    r.run(4)                                                   # shows the old line again + a new one
+    assert len([t for t in r.logs("info") if "Collected Mercury" in t]) == 1
+    assert any("Collected Nova" in t for t in r.logs("info"))

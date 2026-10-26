@@ -76,6 +76,7 @@ ESC_ANYWAY = 20.0           # and this often even when the top bar still reads (
 ESC_GAP = 4.0               # at most one Esc press this often
 SCAN_ESC = 0x01
 CHAT_EVERY = 2.0            # read the chat for 'has collected' lines this often
+CHAT_SEQ_KEEP = 60          # finds remembered in chat order (more than the chat shows)
 FIND_QUIET = 120.0          # the same find again only after it was gone this long
 BANNER_TEXT_QUIET = 600.0   # write an unknown banner text to the log at most this often
 BANNER_TEXT_WORDS = 4       # shorter scraps are scenery, not banners
@@ -198,6 +199,19 @@ def default_deps() -> Deps:
 
 
 # --------------------------------------------------------------- settings ---
+def _new_lines_start(seen: list[str], now_shown: list[str]) -> int:
+    """Where the new lines start in what the chat shows now. The chat is a
+    window sliding down over its history: its top lines are the end of what
+    was already read. Finds the longest top part that matches the end of
+    `seen` (allowing the very top line to be cut off or misread)."""
+    for skip in (0, 1):                         # 1: top line half-scrolled away or misread
+        shown = now_shown[skip:]
+        for j in range(min(len(shown), len(seen)), 0, -1):
+            if shown[:j] == seen[-j:] and (skip == 0 or j >= 2):
+                return j + skip
+    return 0
+
+
 def _flag(st: dict, key: str) -> bool:
     v = st.get(key, paths.DEFAULT_SETTINGS[key])
     return v if isinstance(v, bool) else bool(paths.DEFAULT_SETTINGS[key])
@@ -484,6 +498,7 @@ class Engine:
         self._joined_at = _NEVER                # the latest join line this run
         self._chat_at = _NEVER
         self._chat_primed = False               # the first chat read only learns what's there
+        self._chat_seq: list[str] = []          # your finds in chat order, as read so far
         self._finds_seen: dict[str, float] = {}
         self._errors: set[str] = set()
         self._busy: str | None = None           # the action lock: None | vote | rejoin | anti_afk
@@ -908,9 +923,14 @@ class Engine:
         # The first read of a run only learns what is already in the chat:
         # those finds are from before you pressed Start.
         quiet, self._chat_primed = not self._chat_primed, True
-        for f in finds:
-            if me and not hud.same_player(f.who, me):
-                continue
+        mine = [f for f in finds if not me or hud.same_player(f.who, me)]
+        keys = [f"{f.variant}:{blocks.display_name(f.block).lower()}" for f in mine]
+        # The chat fades out and shows its old lines again when a message comes
+        # in: only the lines below what was already read are new finds.
+        start = _new_lines_start(self._chat_seq, keys)
+        if keys:
+            self._chat_seq = (self._chat_seq + keys[start:])[-CHAT_SEQ_KEEP:]
+        for f in mine[start:]:
             self._found(now, f, quiet=quiet)
 
     def _found(self, now: float, f: hud.Find, quiet: bool = False) -> None:
