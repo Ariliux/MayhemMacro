@@ -32,6 +32,7 @@ CLIENT = CLIENT_RECT[2:]
 OTHER_GAME = "15532962292"
 PRIVATE = "https://www.roblox.com/games/75270037454060/Block-Mayhem-X?privateServerLinkCode=12345678"
 PRIVATE_URI = f"roblox://placeID={PLACE_ID}&linkCode=12345678"
+NEW_URI = f"roblox://experiences/start?placeId={PLACE_ID}&linkCode=12345678"   # tried first
 SHARE = "https://www.roblox.com/share?code=abc123def456&type=Server"
 SHARE_URI = "roblox://navigation/share_links?code=abc123def456&type=Server"
 RAW = f"roblox://placeId={PLACE_ID}&linkCode=12345678"     # tried as saved, then PRIVATE_URI
@@ -1445,7 +1446,7 @@ def test_disconnect_waits_for_the_user_to_be_away_then_rejoins():
     assert r.rejoin.calls == []
     r.run(1)
     assert [c[0] for c in r.rejoin.calls] == ["kill", "launch"]
-    assert r.rejoin.launches() == [PRIVATE_URI]
+    assert r.rejoin.launches() == [NEW_URI]
     assert r.of("rejoin") == [{"type": "rejoin", "phase": "start", "try": 1,
                                "why": "You got disconnected (code 285)"}]
     assert r.states()[-1] == ("rejoining", "Rejoining (try 1 of 5)")
@@ -1503,7 +1504,7 @@ def test_rejoin_backs_off_rotates_links_and_gives_up_after_5():
     gaps = [round(b - a) for a, b in zip(times, times[1:])]
     # 120 s waiting for the join each time, then 30 / 60 / 120 / 300 s.
     assert gaps == [150, 180, 240, 420]
-    assert r.rejoin.launches() == [RAW, PRIVATE_URI, RAW, PRIVATE_URI, RAW]
+    assert r.rejoin.launches() == [NEW_URI, RAW, PRIVATE_URI, NEW_URI, RAW]
     assert r.rejoins() == [("start", 1), ("fail", 1), ("start", 2), ("fail", 2),
                            ("start", 3), ("fail", 3), ("start", 4), ("fail", 4),
                            ("start", 5), ("fail", 5), ("gave_up", 5)]

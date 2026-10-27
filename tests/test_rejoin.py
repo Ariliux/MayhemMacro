@@ -18,6 +18,7 @@ PUBLIC = f"roblox://experiences/start?placeId={PLACE_ID}"
 PS_CODE = "12345678901234567890123456789012"
 SHARE_CODE = "ab12cd34ef56ab12cd34ef56ab12cd34"
 PRIVATE_URI = f"roblox://placeID={PLACE_ID}&linkCode={PS_CODE}"
+NEW_URI = f"roblox://experiences/start?placeId={PLACE_ID}&linkCode={PS_CODE}"   # tried first (Roblox 0.744+)
 SHARE_URI = f"roblox://navigation/share_links?code={SHARE_CODE}&type=Server"
 OTHER_GAME = "15532962292"
 
@@ -26,17 +27,17 @@ OTHER_GAME = "15532962292"
 @pytest.mark.parametrize("link, want", [
     # private server code links, with and without the game's name and extras
     (f"https://www.roblox.com/games/{PLACE_ID}/Block-Mayhem-X?privateServerLinkCode={PS_CODE}",
-     [PRIVATE_URI]),
-    (f"https://www.roblox.com/games/{PLACE_ID}?privateServerLinkCode={PS_CODE}", [PRIVATE_URI]),
+     [NEW_URI, PRIVATE_URI]),
+    (f"https://www.roblox.com/games/{PLACE_ID}?privateServerLinkCode={PS_CODE}", [NEW_URI, PRIVATE_URI]),
     (f"https://www.roblox.com/games/{PLACE_ID}/Block-Mayhem-X?privateServerLinkCode={PS_CODE}"
-     "&utm_source=discord&x=1#top", [PRIVATE_URI]),
+     "&utm_source=discord&x=1#top", [NEW_URI, PRIVATE_URI]),
     (f"https://roblox.com/games/{PLACE_ID}/Block-Mayhem-X?PRIVATESERVERLINKCODE={PS_CODE}",
-     [PRIVATE_URI]),
-    (f"http://web.roblox.com/games/{PLACE_ID}/x?privateServerLinkCode={PS_CODE}", [PRIVATE_URI]),
-    (f"roblox.com/games/{PLACE_ID}?privateServerLinkCode={PS_CODE}", [PRIVATE_URI]),   # no https
-    (f"www.roblox.com/games/{PLACE_ID}?privateServerLinkCode={PS_CODE}", [PRIVATE_URI]),
-    (f"https://www.roblox.com/games/{PLACE_ID}?linkCode={PS_CODE}", [PRIVATE_URI]),
-    (f"Block-Mayhem-X?privateServerLinkCode={PS_CODE}", [PRIVATE_URI]),     # the bare form, front cut off
+     [NEW_URI, PRIVATE_URI]),
+    (f"http://web.roblox.com/games/{PLACE_ID}/x?privateServerLinkCode={PS_CODE}", [NEW_URI, PRIVATE_URI]),
+    (f"roblox.com/games/{PLACE_ID}?privateServerLinkCode={PS_CODE}", [NEW_URI, PRIVATE_URI]),   # no https
+    (f"www.roblox.com/games/{PLACE_ID}?privateServerLinkCode={PS_CODE}", [NEW_URI, PRIVATE_URI]),
+    (f"https://www.roblox.com/games/{PLACE_ID}?linkCode={PS_CODE}", [NEW_URI, PRIVATE_URI]),
+    (f"Block-Mayhem-X?privateServerLinkCode={PS_CODE}", [NEW_URI, PRIVATE_URI]),     # the bare form, front cut off
     # share links: only the share_links form (a share code is not a link code)
     (f"https://www.roblox.com/share?code={SHARE_CODE}&type=Server", [SHARE_URI]),
     (f"https://www.roblox.com/share?code={SHARE_CODE}&type=Server&stamp=1712345678",
@@ -47,11 +48,11 @@ OTHER_GAME = "15532962292"
     (f"https://www.roblox.com/share?code={SHARE_CODE}", [SHARE_URI]),
     (f"HTTPS://WWW.ROBLOX.COM/share?CODE={SHARE_CODE}&TYPE=SERVER", [SHARE_URI]),
     # raw roblox:// links: used as given first, deduplicated
-    (PRIVATE_URI, [PRIVATE_URI]),
+    (PRIVATE_URI, [NEW_URI, PRIVATE_URI]),
     (f"roblox://placeId={PLACE_ID}&linkCode={PS_CODE}",
-     [f"roblox://placeId={PLACE_ID}&linkCode={PS_CODE}", PRIVATE_URI]),
+     [NEW_URI, f"roblox://placeId={PLACE_ID}&linkCode={PS_CODE}", PRIVATE_URI]),
     (f"roblox://placeID={PLACE_ID}&linkCode={PS_CODE}&extra=1",
-     [f"roblox://placeID={PLACE_ID}&linkCode={PS_CODE}&extra=1", PRIVATE_URI]),
+     [NEW_URI, f"roblox://placeID={PLACE_ID}&linkCode={PS_CODE}&extra=1", PRIVATE_URI]),
     (SHARE_URI, [SHARE_URI]),
     (PUBLIC, [PUBLIC]),
     (f"roblox://placeID={PLACE_ID}", [f"roblox://placeID={PLACE_ID}", PUBLIC]),
@@ -86,7 +87,7 @@ def test_pasted_with_junk_around_it(link):
 
 def test_junk_stuck_to_the_code_is_dropped():
     link = f"https://www.roblox.com/games/{PLACE_ID}?privateServerLinkCode={PS_CODE})!"
-    assert rejoin.deep_links(link) == [PRIVATE_URI]
+    assert rejoin.deep_links(link) == [NEW_URI, PRIVATE_URI]
 
 
 def test_phone_short_link_with_the_real_link_inside():

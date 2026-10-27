@@ -176,7 +176,13 @@ def deep_links(link: str) -> list[str]:
     """
     found = read_link(link)
     if found.kind == "private":
-        made = f"roblox://placeID={PLACE_ID}&linkCode={quote(found.code, safe='')}"
+        # Roblox 0.744+ refuses the old placeID=..&linkCode=.. form ("Ambiguous
+        # key combination ... LAUNCH_GAME") and just opens its home screen, so
+        # the experiences/start form goes first; the old one stays as a fallback.
+        code = quote(found.code, safe='')
+        new = f"roblox://experiences/start?placeId={PLACE_ID}&linkCode={code}"
+        old = f"roblox://placeID={PLACE_ID}&linkCode={code}"
+        return list(dict.fromkeys(t for t in (new, found.given, old) if t))
     elif found.kind == "share":
         made = f"roblox://navigation/share_links?code={quote(found.code, safe='')}&type=Server"
     elif found.kind == "public":
