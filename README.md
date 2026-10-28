@@ -55,7 +55,7 @@ something rare shows up.
 
 ## Installing it
 
-1. Go to **[Releases](../../releases/latest)** and download `MayhemMacro-v1.0.3.zip`.
+1. Go to **[Releases](../../releases/latest)** and download `MayhemMacro-v1.0.4.zip`.
    Only get it from here, not from random re-uploads.
 2. Right-click the zip → **Extract All**. Don't run it from inside the zip.
 3. Open the folder and run **`MayhemMacro.exe`**.
@@ -147,7 +147,15 @@ then click **Run anyway**. That only allows this one file.
 **Your browser says the file "isn't commonly downloaded"**: choose **Keep**. In Edge
 it's **…** → **Keep** → **Show more** → **Keep anyway**.
 
-**Your antivirus quarantines it**: don't restore it. Open an [issue](../../issues) with
+**Windows Defender says `Trojan:Win32/Bearfoos.A!ml`**: that's a false alarm. The `!ml`
+means Defender's AI made a guess, not that it found real malware, and it happens to lots of
+apps made with Python. I've reported it to Microsoft. To get MayhemMacro back:
+1. Open **Windows Security** → **Virus & threat protection** → **Protection history**.
+2. Click the MayhemMacro alert → **Actions** → **Allow on device**.
+
+That only allows this one detection, nothing else.
+
+**A different antivirus quarantines it**: don't restore it. Open an [issue](../../issues) with
 the exact detection name and I'll get it reported as a false positive. It listens for F1/F2/F8
 and presses keys in Roblox, and some antivirus programs flag anything that does that.
 

@@ -64,6 +64,9 @@ BANNER_PATIENCE = 3.0       # wait this long for a read of a banner that shows i
 SETUP_IDLE = 1.5            # start-of-run setup waits this long after your last input (the F1 press)
 PLAY_HUD_GONE = 20.0        # round timer gone this long: maybe the title screen - look for PLAY
 PLAY_EVERY = 1.5            # look for the title screen's PLAY button this often while loading
+PLAY_FAST = 4               # this many quick presses, then slower: the game may still be loading
+PLAY_SLOW_EVERY = 5.0
+PLAY_LOG_EVERY = 10         # Activity says 'still pressing' every this many presses
 MEDAL_DELAY = 10.0          # press the clip key this long after the detection (the clip shows it)
 FROZEN_AFTER = 180.0        # the picture hasn't changed this long: the screen is off or frozen
 FROZEN_NUDGE_EVERY = 300.0  # wiggle the mouse to wake it at most this often
@@ -488,9 +491,12 @@ class Engine:
         self._clipped: dict[str, float] = {}
         self._frame_sig: bytes | None = None
         self._frame_same_since = self._nudged_at = _NEVER
+        self._wiggles = 0                       # wake-up wiggles in this frozen stretch
+        self._game_frozen = False               # still frozen after a wiggle: Roblox froze
         self._clip_at: float | None = None      # when to press the Medal clip key
         self._clip_last = _NEVER
         self._play_at = _NEVER
+        self._play_presses = 0                  # PLAY presses since the game was last seen
         self._start_elsewhere = False           # Roblox was in another game at Start
         self._setup_done = False                # start-of-run setup (pinned recipe, cursor)
         self._setup_idle = SETUP_IDLE           # how long you must be still before it runs
@@ -1337,19 +1343,26 @@ class Engine:
         if old is None or len(old) != len(sig) or \
                 sum(abs(a - b) for a, b in zip(sig, old)) > len(sig) * 2:
             self._frame_same_since = now        # the picture moved: all good
+            self._wiggles, self._game_frozen = 0, False
             return
         if now - self._frame_same_since < FROZEN_AFTER or now - self._nudged_at < FROZEN_NUDGE_EVERY:
             return
         if self._busy is not None or self._rj is not None or not self._input_ok(look):
+            return
+        if self._wiggles and not self._game_frozen:
+            # Woken up and still not moving: it's Roblox that froze (it lost
+            # the server, and only kicks you with 277 many minutes later).
+            self._game_frozen = True
             return
         nudge = getattr(self.deps.inputs, "nudge", None)
         if nudge is None:
             return
         self._nudged_at = now
         if nudge():
+            self._wiggles += 1
             self._frame_same_since = now
-            self._log("warn", "The screen picture froze (the screen was probably off) - "
-                              "wiggled the mouse to wake it.")
+            self._log("warn", "The game picture stopped moving - wiggled the mouse in case "
+                              "the screen was off.")
 
     # -- Roblox in front -------------------------------------------------------------
     def _keep_front(self, now: float, st: dict, look: _Look) -> None:
@@ -1608,6 +1621,8 @@ class Engine:
         if self._disconnected(disconnects):
             code = f" (code {self._dc_reason})" if self._dc_reason else ""
             return f"You got disconnected{code}"
+        if self._game_frozen:
+            return "Roblox froze (the game picture stopped moving, even after waking the screen)"
         if self._no_window_since is not None and now - self._no_window_since >= NO_WINDOW_AFTER:
             return "Roblox closed"
         if self._not_bmx_since is not None and now - self._not_bmx_since >= NOT_BMX_AFTER:
@@ -1754,7 +1769,10 @@ class Engine:
     def _press_play(self, now: float, look: _Look) -> None:
         """Block Mayhem X opens on a title screen: press its PLAY button so the
         game loads (the rejoin waits for that). Only with Roblox in front."""
-        if now - self._play_at < PLAY_EVERY or not (look.hwnd and look.fg and not look.minimized):
+        if self._timer_at > self._play_at:
+            self._play_presses = 0              # the game showed up since the last press
+        every = PLAY_EVERY if self._play_presses < PLAY_FAST else PLAY_SLOW_EVERY
+        if now - self._play_at < every or not (look.hwnd and look.fg and not look.minimized):
             return
         self._play_at = now
         w = self.deps.window
@@ -1767,13 +1785,20 @@ class Engine:
             return
         pt = hud.find_play(self.deps.ocr, img)
         if pt and self.deps.inputs.click_at(rect[0] + pt[0], rect[1] + pt[1]):
-            self._log("info", "Pressed Play.")
+            self._play_presses += 1
+            n = self._play_presses
+            if n == 1:
+                self._log("info", "Pressed Play.")
+            elif n % PLAY_LOG_EVERY == 0:
+                self._log("info", f"Still on the title screen - pressed Play {n} times "
+                                  "(the game may still be loading).")
 
     def _rejoined(self, now: float, rj: _Rejoin) -> None:
         self._rj = None
         self._busy = None
         self._no_window_since = self._not_bmx_since = None
         self._dc_noted = False
+        self._wiggles, self._game_frozen, self._frame_sig = 0, False, None
         self._setup_idle = INPUT_IDLE           # our own rejoin: set up with the usual 5 s rule
         self._emit({"type": "rejoin", "phase": "ok", "try": rj.tries, "why": rj.why})
         self._log("info", "Back in Block Mayhem X.")

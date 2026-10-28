@@ -2062,7 +2062,7 @@ def test_a_frozen_picture_wakes_the_screen_with_a_mouse_wiggle():
     assert nudged == []                              # not frozen long enough yet
     until(engine_mod.FROZEN_AFTER + 20)
     assert len(nudged) == 1
-    assert any("picture froze" in t for t in r.logs("warn"))
+    assert any("stopped moving" in t for t in r.logs("warn"))
     until(engine_mod.FROZEN_AFTER + engine_mod.FROZEN_NUDGE_EVERY - 20)
     assert len(nudged) == 1                          # not again right away
 
@@ -2122,3 +2122,31 @@ def test_old_chat_lines_shown_again_are_not_new_finds():
     r.run(4)                                                   # shows the old line again + a new one
     assert len([t for t in r.logs("info") if "Collected Mercury" in t]) == 1
     assert any("Collected Nova" in t for t in r.logs("info"))
+
+
+def test_still_frozen_after_the_wiggle_means_roblox_froze_and_it_rejoins():
+    r = Rig().start()
+    r.inputs.nudge = lambda: True
+    r.run(engine_mod.FROZEN_AFTER + 10)
+    assert any("stopped moving" in t for t in r.logs("warn"))
+    assert not r.engine._game_frozen                     # one wiggle: maybe just the screen
+    r.run(engine_mod.FROZEN_NUDGE_EVERY + 10)
+    assert r.engine._game_frozen
+    assert any("Roblox froze" in t for t in r.logs("warn"))
+
+
+def test_play_presses_slow_down_and_stay_out_of_the_activity_log():
+    r = Rig().start()
+    eng = r.engine
+    presses = []
+    r.inputs.click_at = lambda x, y: presses.append(1) or True
+    import mayhem.hud as hud_mod
+    old = hud_mod.find_play
+    hud_mod.find_play = lambda ocr, img: (100, 100)
+    try:
+        r.clock.t += engine_mod.PLAY_HUD_GONE + 1
+        r.run(60)
+    finally:
+        hud_mod.find_play = old
+    assert 0 < len(presses) <= engine_mod.PLAY_FAST + 60 / engine_mod.PLAY_SLOW_EVERY + 1
+    assert len([t for t in r.logs("info") if t == "Pressed Play."]) <= 1
