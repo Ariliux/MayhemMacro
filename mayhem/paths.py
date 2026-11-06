@@ -33,6 +33,7 @@ DEFAULT_SETTINGS: dict = {
     "storage_alert": True,
     "afk_bring_to_front": False,
     "front_hourly": True,
+    "fullscreen": True,
     "afk_variety": True,
     "session_bar": True,
     "bar_rare_min": 10000000,

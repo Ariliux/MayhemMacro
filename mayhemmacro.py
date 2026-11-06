@@ -4645,6 +4645,12 @@ class MayhemMacro(ctk.CTk):
             "During a run: no sleep, and the screen stays on. With the screen off "
             "the macro can't see the game.", first=True, on=s.get("keep_awake", True) is True,
             command=self._awake_switched)
+        self.sw_full = self._switch_row(
+            card, "Make Roblox fullscreen at the start",
+            "If Roblox is in a window when a run starts (or after a rejoin), presses "
+            "F11 once. If you put it back in a window yourself, it leaves it.",
+            on=s.get("fullscreen", True) is True,
+            command=lambda: self._flag_switched("fullscreen", self.sw_full))
         self.sw_bar = self._switch_row(
             card, "Session bar on top of Roblox",
             "A slim stats bar at the top of your screen during a run: time, "

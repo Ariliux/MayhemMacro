@@ -117,9 +117,13 @@ class FakeWindow:
         self.hwnd_error: Exception | None = None
         self.front_ok = True
         self.fullscreen = False                    # a full-screen video or game in front
+        self.full: bool | None = True              # Roblox itself fullscreen (is_fullscreen)
 
     def fullscreen_app_in_front(self) -> bool:
         return self.fullscreen
+
+    def is_fullscreen(self, h: int) -> bool | None:
+        return self.full if h and not self.minimized else None
 
     def roblox_hwnd(self) -> int:
         self.looks += 1
@@ -326,6 +330,7 @@ class Rig:
         self.settings["start_jump"] = False
         self.settings["close_esc_menu"] = False   # no Esc presses unless a test asks
         self.settings["front_hourly"] = False     # no window raising unless a test asks
+        self.settings["fullscreen"] = False       # no F11 unless a test asks
         self.settings.update(settings)
         self.events: list[dict] = []
         self.deps = Deps(window=self.window, ocr=self.ocr, inputs=self.inputs,

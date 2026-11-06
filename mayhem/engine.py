@@ -78,6 +78,16 @@ ESC_HUD_LOST = 6.0          # ...once the game's top bar has been hidden this lo
 ESC_ANYWAY = 20.0           # and this often even when the top bar still reads (dim menu overlay)
 ESC_GAP = 4.0               # at most one Esc press this often
 SCAN_ESC = 0x01
+# Fullscreen at the start. Roblox switches ITSELF to fullscreen part way
+# through starting up when that's its saved setting, and F11 is a toggle, so
+# Roblox must sit in a window, in front, this long before F11 is pressed.
+SCAN_F11 = 0x57
+FULLSCREEN_PATIENCE = 3.0
+# Per Roblox window. Two: if a window is ever misread, two presses flip it
+# there and back and leave it as it was, instead of flipping it forever.
+FULLSCREEN_TRIES = 2
+FULLSCREEN_SETTLE = 1.5     # the game re-lays out for the new size: no reads or clicks meanwhile
+FULLSCREEN_WAIT = 12.0      # the start-of-run setup waits this long at most for it
 CHAT_EVERY = 2.0            # read the chat for 'has collected' lines this often
 CHAT_SEQ_KEEP = 60          # finds remembered in chat order (more than the chat shows)
 FIND_QUIET = 120.0          # the same find again only after it was gone this long
@@ -470,6 +480,7 @@ class Engine:
         if not self.running:
             return
         self._step("bringing Roblox to the front", self._keep_front, now, st, look)
+        self._step("making Roblox fullscreen", self._fullscreen, now, st, look)
         self._step("reading the screen", self._screen, now, st, look)
         self._step("pressing Play", self._start_play, now, look)
         self._step("getting the game ready", self._setup, now, st, look)
@@ -499,6 +510,12 @@ class Engine:
         self._play_presses = 0                  # PLAY presses since the game was last seen
         self._start_elsewhere = False           # Roblox was in another game at Start
         self._setup_done = False                # start-of-run setup (pinned recipe, cursor)
+        self._fs_hwnd = 0                       # the Roblox window the fullscreen step is on
+        self._fs_since: float | None = None     # in a window, in front, since then
+        self._fs_seen = _NEVER                  # when this window was first seen
+        self._fs_tries = 0
+        self._fs_pressed = False
+        self._fs_done = False                   # this window was fullscreen, or it gave up
         self._setup_idle = SETUP_IDLE           # how long you must be still before it runs
         self._setups = 0
         self._joined_at = _NEVER                # the latest join line this run
@@ -1389,6 +1406,62 @@ class Engine:
         if self.deps.window.bring_to_front(look.hwnd):
             self._log("info", "Brought Roblox to the front so the macro can see the game.")
 
+    # -- fullscreen at the start ------------------------------------------------------
+    def _fullscreen(self, now: float, st: dict, look: _Look) -> None:
+        """When a run starts (and when a rejoin opens a new Roblox), press F11
+        if Roblox is in a window. Once per window: if you put it back in a
+        window yourself after that, it stays that way."""
+        if not _flag(st, "fullscreen") or not look.hwnd:
+            return
+        if look.hwnd != self._fs_hwnd:          # a new Roblox window gets its own go
+            self._fs_hwnd, self._fs_since, self._fs_seen = look.hwnd, None, now
+            self._fs_tries, self._fs_pressed, self._fs_done = 0, False, False
+        if self._fs_done:
+            return
+        check = getattr(self.deps.window, "is_fullscreen", None)
+        if check is None:
+            self._fs_done = True                # can't tell: never guess with a toggle key
+            return
+        if not look.fg or look.minimized or self._busy is not None or self._rj is not None \
+                or self._vote is not None:
+            self._fs_since = None               # the patience is time spent IN FRONT
+            return
+        full = check(look.hwnd)
+        if full is None:
+            self._fs_since = None
+            return
+        if full:
+            if self._fs_pressed:
+                self._log("info", "Roblox is fullscreen now.")
+            self._fs_done = True
+            return
+        if self._fs_since is None:
+            self._fs_since = now
+            return
+        if now - self._fs_since < FULLSCREEN_PATIENCE or look.user_idle < SETUP_IDLE:
+            return
+        if self._fs_tries >= FULLSCREEN_TRIES:
+            self._fs_done = True
+            self._log("warn", "Couldn't make Roblox fullscreen. Press F11 in Roblox yourself.")
+            return
+        self._fs_tries += 1
+        self._fs_pressed = True
+        self._fs_since = None                   # the patience starts over after every press
+        self._busy = "fullscreen"
+        try:
+            ok = bool(self.deps.inputs.tap_scan(SCAN_F11))
+            if ok:
+                self._log("info", "Roblox was in a window - pressed F11 for fullscreen.")
+                self.deps.sleep(FULLSCREEN_SETTLE)
+        finally:
+            self._busy = None
+
+    def _fs_waiting(self, now: float, st: dict, look: _Look) -> bool:
+        """The fullscreen step is still busy with this window. The start-of-run
+        setup waits for it - a click aimed in a window lands somewhere else
+        once the game goes fullscreen - but never longer than FULLSCREEN_WAIT."""
+        return _flag(st, "fullscreen") and look.hwnd == self._fs_hwnd and not self._fs_done             and now - self._fs_seen < FULLSCREEN_WAIT
+
     # -- the vote screen, seen directly ---------------------------------------------
     def _vote_title(self, now: float, st: dict, look: _Look) -> None:
         """The vote screen hides the round timer. If the timer was missed
@@ -1450,6 +1523,8 @@ class Engine:
             return                              # a dead session: nothing to set up
         if look.user_idle < self._setup_idle or not getattr(self.deps.tail, "loaded", True):
             return
+        if self._fs_waiting(now, st, look):
+            return                              # fullscreen first, then aim the clicks
         self._setup_done = True
         self._setups += 1
         self._busy = "setup"

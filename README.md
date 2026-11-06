@@ -30,9 +30,9 @@ something rare shows up.
 - **Votes for your maps.** Tick the maps you like and put them in order. When the world
   vote comes up it clicks the green **VOTE** button of your #1 map if it's there, then #2,
   and so on. If none of your maps are in the vote, it votes for the first map.
-- **Gets the game ready when a run starts.** It opens your pinned recipe (the arrow on the
-  right), puts the cursor in the middle of the screen and jumps once. Each of those can be
-  switched off.
+- **Gets the game ready when a run starts.** It makes Roblox fullscreen (presses F11 if
+  Roblox is in a window), opens your pinned recipe (the arrow on the right), puts the cursor
+  in the middle of the screen and jumps once. Each of those can be switched off.
 - **Storage full alert** when your storage stays full for a minute.
 - **A session bar** on top of Roblox during a run: run time, the rarest block so far, rare
   count, your votes, rejoins and anti-AFK jumps.

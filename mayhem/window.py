@@ -41,6 +41,11 @@ class LASTINPUTINFO(ctypes.Structure):
     _fields_ = [("cbSize", wintypes.UINT), ("dwTime", DWORD)]
 
 
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", DWORD), ("rcMonitor", wintypes.RECT),
+                ("rcWork", wintypes.RECT), ("dwFlags", DWORD)]
+
+
 class PROCESSENTRY32W(ctypes.Structure):
     _fields_ = [("dwSize", DWORD), ("cntUsage", DWORD), ("th32ProcessID", DWORD),
                 ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", DWORD),
@@ -68,7 +73,11 @@ _GetWindowThreadProcessId = _proto(_u32, "GetWindowThreadProcessId", DWORD, HWND
                                    ctypes.POINTER(DWORD))
 _GetClientRect = _proto(_u32, "GetClientRect", BOOL, HWND, ctypes.POINTER(wintypes.RECT))
 _ClientToScreen = _proto(_u32, "ClientToScreen", BOOL, HWND, ctypes.POINTER(wintypes.POINT))
+_GetWindowRect = _proto(_u32, "GetWindowRect", BOOL, HWND, ctypes.POINTER(wintypes.RECT))
+_MonitorFromWindow = _proto(_u32, "MonitorFromWindow", wintypes.HMONITOR, HWND, DWORD)
 _GetSystemMetrics = _proto(_u32, "GetSystemMetrics", ctypes.c_int, ctypes.c_int)
+_GetMonitorInfoW = _proto(_u32, "GetMonitorInfoW", BOOL, wintypes.HMONITOR,
+                          ctypes.POINTER(MONITORINFO))
 _GetLastInputInfo = _proto(_u32, "GetLastInputInfo", BOOL, ctypes.POINTER(LASTINPUTINFO))
 _SetForegroundWindow = _proto(_u32, "SetForegroundWindow", BOOL, HWND)
 _BringWindowToTop = _proto(_u32, "BringWindowToTop", BOOL, HWND)
@@ -244,6 +253,24 @@ def is_foreground(hwnd: int) -> bool:
 
 def is_minimized(hwnd: int) -> bool:
     return bool(hwnd) and bool(_IsIconic(hwnd))
+
+
+def is_fullscreen(hwnd: int) -> bool | None:
+    """True if the Roblox window covers its whole screen, False if it's in a
+    window (even maximised: that stops at the taskbar and hangs its border
+    past the edges), None if it can't be read. Only looks."""
+    if not hwnd or not _IsWindow(hwnd) or _IsIconic(hwnd):
+        return None
+    r = wintypes.RECT()
+    if not _GetWindowRect(hwnd, ctypes.byref(r)):
+        return None
+    mon = _MonitorFromWindow(hwnd, 2)             # MONITOR_DEFAULTTONEAREST
+    info = MONITORINFO()
+    info.cbSize = ctypes.sizeof(MONITORINFO)
+    if not mon or not _GetMonitorInfoW(mon, ctypes.byref(info)):
+        return None
+    m = info.rcMonitor
+    return (r.left, r.top, r.right, r.bottom) == (m.left, m.top, m.right, m.bottom)
 
 
 def client_rect(hwnd: int) -> tuple[int, int, int, int] | None:
