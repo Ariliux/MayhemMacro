@@ -4,7 +4,14 @@
 
 <h1 align="center">MayhemMacro</h1>
 
-<p align="center">An AFK helper for the Roblox game <b>Block Mayhem X</b>.</p>
+<p align="center">An AFK macro for the Roblox game <b>Block Mayhem X</b>: anti-AFK, auto rejoin,<br>
+rare block alerts on Discord and auto world vote. Free, no exploits, just reads the screen.</p>
+
+<p align="center"><a href="../../releases/latest"><b>Download the latest version</b></a></p>
+
+<p align="center">
+  <img src="docs/screenshot-home.png" width="760" alt="MayhemMacro during a run: run time, rares, votes, anti-AFK saves and recent activity">
+</p>
 
 ## Why I made this
 
@@ -44,6 +51,11 @@ something rare shows up.
   reopening Roblox, pulling it to the front) waits until you've been away for a minute,
   and not while a full-screen video or game is in front.
 
+<p align="center">
+  <img src="docs/screenshot-vote.png" width="49%" alt="World vote page: tick your maps and rank them">
+  <img src="docs/screenshot-alerts.png" width="49%" alt="Alerts page: rare block alerts and Discord pings">
+</p>
+
 ## What you need
 
 - Windows 10 or 11
@@ -56,7 +68,7 @@ something rare shows up.
 
 ## Installing it
 
-1. Go to **[Releases](../../releases/latest)** and download `MayhemMacro-v1.0.4.zip`.
+1. Go to **[Releases](../../releases/latest)** and download the `MayhemMacro-v….zip` file.
    Only get it from here, not from random re-uploads.
 2. Right-click the zip → **Extract All**. Don't run it from inside the zip.
 3. Open the folder and run **`MayhemMacro.exe`**.
