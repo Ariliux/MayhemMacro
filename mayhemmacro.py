@@ -194,10 +194,15 @@ def round_box(w: int, h: int, fill: str, border: str, bg: str | None = None,
 
 
 # ------------------------------------------------------------ the screen ---
-# The screen reading (banner, HUD timer, vote) is only tested on a 1920x1080
-# screen at 100% Windows scaling, so the app says so when the screen differs.
-SUPPORTED_SCREEN = (1920, 1080)
+# The screen reading (banner, HUD timer, vote) was tuned on a 1920x1080 screen
+# at 100% Windows scaling. Bigger 16:9 screens are read from a picture shrunk to
+# 1080 tall (engine.VIEW_H), so they read the same; anything else gets a heads-up.
 SUPPORTED_SCALING = 100
+
+
+def screen_supported(sw: int, sh: int) -> bool:
+    """16:9 and at least 1080 tall: 1920x1080, 2560x1440, 3840x2160..."""
+    return sh >= 1080 and abs(sw / sh - 16 / 9) < 0.01
 
 
 def screen_size() -> tuple[int, int]:
@@ -1623,7 +1628,7 @@ class MayhemMacro(ctk.CTk):
         self._reset_armed = None
 
         sw, sh = screen_size()
-        self._screen_ok = (sw, sh) == SUPPORTED_SCREEN
+        self._screen_ok = screen_supported(sw, sh)
         self._scaling = display_scaling()
 
         # ---- the window: sidebar | 1px line | header / hairline / pages ----
@@ -4744,7 +4749,7 @@ class MayhemMacro(ctk.CTk):
                        "Every line it has written, for bug reports",
                        self._open_log)
 
-        ctk.CTkLabel(sp, text=(f"{APP_NAME} {APP_VER} · tested on 1920×1080 "
+        ctk.CTkLabel(sp, text=(f"{APP_NAME} {APP_VER} · made for 16:9 screens "
                                f"at 100% · F1 starts, F2 stops"),
                      text_color=MUTED, font=self.F(11), height=16
                      ).pack(pady=(18, 8))
@@ -5381,16 +5386,16 @@ class MayhemMacro(ctk.CTk):
     # ======================================================= screen checks ==
     def _paint_res(self, sw, sh, pct):
         """The sidebar footer, About's Screen line and Settings > Display."""
-        screen_ok = (sw, sh) == SUPPORTED_SCREEN
+        screen_ok = screen_supported(sw, sh)
         scale_ok = pct == SUPPORTED_SCALING
         if screen_ok and scale_ok:
-            text, colour = "1920×1080 at 100%", MUTED
+            text, colour = f"{sw}×{sh} at 100%", MUTED
         elif scale_ok:
-            text, colour = f"{sw}×{sh} · tested on 1920×1080", AMBER
+            text, colour = f"{sw}×{sh} · made for 16:9 screens", AMBER
         elif screen_ok:
             text, colour = f"{pct}% scaling · tested at 100%", AMBER
         else:
-            text, colour = f"{sw}×{sh} at {pct}% · tested on 1920×1080 at 100%", AMBER
+            text, colour = f"{sw}×{sh} at {pct}% · made for 16:9 at 100%", AMBER
         ok = screen_ok and scale_ok
         try:
             self.lbl_res.configure(text=text, text_color=colour)
@@ -5400,23 +5405,24 @@ class MayhemMacro(ctk.CTk):
                 text=("✓  " if ok else "!  ") + f"{sw}×{sh} at {pct}%",
                 text_color=GREEN if ok else AMBER)
             self.lbl_disp_note.configure(
-                text="The setup it's tested on: reading the banner, the vote "
-                     "timer and storage works best like this." if ok else
-                "It's only tested on 1920×1080 at 100% scaling, so reading the "
-                "game may miss things. Windows: Settings › System › Display.")
+                text="A 16:9 screen at 100% scaling: reading the banner, the "
+                     "vote timer and storage works best like this." if ok else
+                "It's made for 16:9 screens (1920×1080, 2560×1440, 3840×2160) at "
+                "100% scaling, so reading the game may miss things. Windows: "
+                "Settings › System › Display.")
         except Exception:
             pass
 
     def _recheck_display(self):
         """Every few seconds: did the screen size or Windows scaling change?"""
         (sw, sh), pct = screen_size(), display_scaling()
-        ok = (sw, sh) == SUPPORTED_SCREEN
+        ok = screen_supported(sw, sh)
         if ok == self._screen_ok and pct == self._scaling:
             return
         self._screen_ok, self._scaling = ok, pct
         self._paint_res(sw, sh, pct)
         if ok and pct == SUPPORTED_SCALING:
-            self.log("screen check: 1920x1080 at 100% - all good now")
+            self.log(f"screen check: {sw}x{sh} at 100% - all good now")
         else:
             self._warn_display()
 
@@ -5424,12 +5430,12 @@ class MayhemMacro(ctk.CTk):
         """A heads-up for each thing about this screen the screen reading
         isn't tested on. At open (the Log only) and on every Start."""
         (sw, sh), pct = screen_size(), display_scaling()
-        self._scaling, self._screen_ok = pct, (sw, sh) == SUPPORTED_SCREEN
-        if (sw, sh) != SUPPORTED_SCREEN:
+        self._scaling, self._screen_ok = pct, screen_supported(sw, sh)
+        if not self._screen_ok:
             self.log(f"heads up: this screen is {sw}x{sh} - reading the game "
-                     f"is only tested on 1920x1080", "warn")
+                     f"is made for 16:9 screens like 1920x1080 or 2560x1440", "warn")
             if feed:
-                self._feed_add("screen", "!", "AMBER", "Screen isn't 1920×1080",
+                self._feed_add("screen", "!", "AMBER", "Screen isn't 16:9",
                                "reading the game may miss things")
         if pct != SUPPORTED_SCALING:
             self.log(f"heads up: Windows scaling is {pct}% - reading the game "

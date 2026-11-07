@@ -44,6 +44,11 @@ AFK_CLICK_AT = (0.5, 0.42)              # client fractions: open game view, clea
 AFK_JITTER = 60.0                       # with variety on, act up to this many s before the threshold
 VOTE_BUTTON_DY = 0.064                  # map name -> VOTE button centre, share of client height (65 px at 1009)
 CLICK_INSET = 4                         # px kept clear of the Roblox picture's edges
+# Bigger screens. Everything that reads the game was measured on 1920x1080, so
+# a Roblox picture taller than this is shrunk to it before anything looks at
+# it (_see), and a spot found in it is scaled back up to real pixels for the
+# click (_real). Up to 1080 tall nothing is resized: 1920x1080 is unchanged.
+VIEW_H = 1080
 INPUT_IDLE = 5.0            # the user hasn't touched the PC this long: keys and clicks are OK
 AWAY_IDLE = 60.0            # ...and this long means away: rejoin and focus changes are OK
 
@@ -290,6 +295,13 @@ class _Look:
     def readable(self) -> bool:
         """Screen reading is allowed: Roblox in front, not minimised, in BMX."""
         return bool(self.hwnd) and self.fg and not self.minimized and self.in_bmx
+
+
+def view_scale(rect: tuple[int, int, int, int] | None) -> float:
+    """Real pixels per pixel of the picture the game is read from: 1.0 up to
+    1080 tall, 1.333 for a 1440-tall Roblox, 2.0 for a 2160-tall one."""
+    h = rect[3] if rect else 0
+    return h / VIEW_H if h > VIEW_H else 1.0
 
 
 @dataclass
@@ -1076,7 +1088,7 @@ class Engine:
         if not rect:
             return
         try:
-            img = w.grab(rect)
+            img = self._see(rect)
         except OSError:
             # Locked PC or a UAC prompt: can't see, not broken.
             self._banner_waited(now, st, force=True)
@@ -1253,12 +1265,30 @@ class Engine:
 
     def _click(self, rect: tuple[int, int, int, int], pick: vote.VoteOption, st: dict) -> bool:
         off = st.get("vote_click_offset") or (0, 0)
+        f = view_scale(rect)
+        vw, vh = rect[2] / f, rect[3] / f       # the picture the OCR boxes are in
         x, y = vote.click_point(pick, off)
-        y += round(VOTE_BUTTON_DY * rect[3])    # the green VOTE button sits under the map name
-        if not (CLICK_INSET <= x < rect[2] - CLICK_INSET and CLICK_INSET <= y < rect[3] - CLICK_INSET):
+        y += round(VOTE_BUTTON_DY * vh)         # the green VOTE button sits under the map name
+        if not (CLICK_INSET <= x < vw - CLICK_INSET and CLICK_INSET <= y < vh - CLICK_INSET):
             return False                        # outside Roblox's picture: never click there
-        # click_at wants SCREEN pixels; the OCR boxes are client pixels.
-        return bool(self.deps.inputs.click_at(rect[0] + x, rect[1] + y))
+        # click_at wants SCREEN pixels; the OCR boxes are in the picture.
+        return bool(self.deps.inputs.click_at(*self._real(rect, x, y)))
+
+    def _see(self, rect: tuple[int, int, int, int]) -> Image.Image:
+        """The Roblox picture, shrunk to VIEW_H tall when it's taller. Raises
+        like window.grab()."""
+        img = self.deps.window.grab(rect)
+        f = view_scale(rect)
+        if f != 1.0 and img.height > VIEW_H:
+            img = img.resize((max(1, round(img.width / f)), max(1, round(img.height / f))),
+                             Image.LANCZOS)
+        return img
+
+    @staticmethod
+    def _real(rect: tuple[int, int, int, int], x: float, y: float) -> tuple[int, int]:
+        """A spot in the picture from _see() -> screen pixels."""
+        f = view_scale(rect)
+        return rect[0] + int(round(x * f)), rect[1] + int(round(y * f))
 
     def _end_vote(self, now: float, how: str) -> None:
         v = self._vote
@@ -1329,7 +1359,7 @@ class Engine:
         if not rect:
             return
         try:
-            img = w.grab(rect)
+            img = self._see(rect)
         except OSError:
             return
         if not hud.esc_menu_open(self.deps.ocr, img):
@@ -1482,7 +1512,7 @@ class Engine:
         if not rect:
             return
         try:
-            img = w.grab(rect)
+            img = self._see(rect)
         except Exception:                   # the screen step already says when it can't see
             return
         if hud.vote_title_shown(self.deps.ocr, img):
@@ -1555,7 +1585,7 @@ class Engine:
         if not rect:
             return
         try:
-            img = w.grab(rect)
+            img = self._see(rect)
         except OSError:
             return                              # can't see right now (locked PC)
         if hud.pinned_open(self.deps.ocr, img):
@@ -1571,11 +1601,11 @@ class Engine:
             # reading, or a misread). Clicking would close it.
             self._log("info", "The pinned recipe is already open.")
             return
-        if not self.deps.inputs.click_at(rect[0] + pt[0], rect[1] + pt[1]):
+        if not self.deps.inputs.click_at(*self._real(rect, pt[0], pt[1])):
             return
         self.deps.sleep(0.8)
         try:
-            opened = hud.pinned_open(self.deps.ocr, w.grab(rect))
+            opened = hud.pinned_open(self.deps.ocr, self._see(rect))
         except OSError:
             return
         if opened:
@@ -1855,11 +1885,11 @@ class Engine:
         if not rect:
             return
         try:
-            img = w.grab(rect)
+            img = self._see(rect)
         except Exception:                   # the screen step already says when it can't see
             return
         pt = hud.find_play(self.deps.ocr, img)
-        if pt and self.deps.inputs.click_at(rect[0] + pt[0], rect[1] + pt[1]):
+        if pt and self.deps.inputs.click_at(*self._real(rect, pt[0], pt[1])):
             self._play_presses += 1
             n = self._play_presses
             if n == 1:

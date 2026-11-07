@@ -47,9 +47,10 @@ something rare shows up.
 ## What you need
 
 - Windows 10 or 11
-- A **1920×1080** screen with Windows display scaling at **100%**. That's the only setup
-  it's tested on. Other sizes may work, but reading the game can miss things (the app tells
-  you if your screen is different).
+- A **16:9** screen (1920×1080, 2560×1440, 3840×2160...) with Windows display scaling at
+  **100%**. It was tuned on 1920×1080, and on bigger screens it shrinks the game picture to
+  that size before reading it. Smaller, 16:10 and ultrawide screens may miss things (the app
+  tells you if your screen is one of those).
 - Windows' English text recognition. It comes with an English Windows. If the app says it
   can't read the screen, add English in Settings → Time & language → Language & region.
 
