@@ -840,7 +840,8 @@ class Engine:
             # mythic - except a chromatic note, which never has a number.
             alert = source != "log_chromatic"
         if not alert:
-            self._log("info", f"{shown} spawned{odds}.")
+            if not blocks.is_tier(name):        # Common..Godly spawn all the time
+                self._log("info", f"{shown} spawned{odds}.")
             return
 
         # A picture only for blocks at or above your own rarity setting (not for

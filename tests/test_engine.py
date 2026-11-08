@@ -1027,6 +1027,17 @@ def test_below_rare_min_is_only_logged():
     assert r2.of("rare")[0]["denominator"] == 10000
 
 
+@pytest.mark.parametrize("text", ["Godly has spawned! (1 / 5,000)",
+                                  "Legendary has spawned! (1 / 1,750)",
+                                  "Common has spawned! (1 / 20)"])
+def test_plain_tier_blocks_stay_out_of_the_activity_log(text):
+    r = Rig().start()
+    r.ocr.script["banner"] = [text]
+    r.tick()
+    assert r.of("rare") == []
+    assert not any("spawned" in line for line in r.logs("info"))
+
+
 @pytest.mark.parametrize("always, alerts", [(True, True), (False, False)])
 def test_variants_alert_always_when_switched_on(always, alerts):
     # Chromatic Opal is 1 in 250,000 (Opal 10,000 x 25): under a 1-in-1M line

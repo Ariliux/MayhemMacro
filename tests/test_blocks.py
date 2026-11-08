@@ -17,6 +17,9 @@ def test_known_table():
     assert KNOWN["resonance"] == 100_000
     assert KNOWN["opal"] == 10_000
     assert KNOWN["rare"] == 200
+    assert KNOWN["godly"] == 5_000 and KNOWN["common"] == 20
+    assert KNOWN["glacier"] == 4_000_000_000 and KNOWN["destiny"] == 10_000_000
+    assert KNOWN["zenith"] == 22_500_000_000 and KNOWN["galacticrift"] == 2_500_000_000
     for name, n in KNOWN.items():
         assert name == name.lower() and name.isalnum()
         assert isinstance(n, int) and n > 1

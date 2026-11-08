@@ -9,14 +9,17 @@ Discord alert is worse than none, so an unknown block simply gets no number.
 import re
 
 # How the game writes the name -> rarity denominator (1 in N). From the Block
-# Mayhem X wiki's world pages (2026-10-14), plus Lucid (Arctic, read in game).
+# Mayhem X wiki's world and block pages (2026-10-14, all blocks 2026-11-07), plus
+# the Arctic ones read in game (the wiki has no Arctic rarities).
 _TABLE: tuple[tuple[str, int], ...] = (
     # Overworld
-    ("Iris", 1_000_000_000), ("Gaia", 350_000_000), ("Beyond", 10_000_000),
+    ("Iris", 1_000_000_000), ("Gaia", 350_000_000), ("Arboric", 100_000_000),
+    ("Beyond", 10_000_000),
     ("Sovereign", 4_500_000), ("Entropy", 500_000), ("Evergreen", 100_000),
     ("Viridian", 50_000), ("Life", 25_000), ("Peace", 10_000),
-    # Void
-    ("Convergence", 3_000_000_000), ("Desolate", 200_000_000), ("Expanse", 75_000_000),
+    # Void (wiki: Galactic Rift may only come from the Hex worker's Cursed)
+    ("Convergence", 3_000_000_000), ("Galactic Rift", 2_500_000_000),
+    ("Desolate", 200_000_000), ("Quantumyx", 100_000_000), ("Expanse", 75_000_000),
     ("Missing", 13_370_000), ("Tesseract", 6_000_000), ("Voidrinyx", 1_000_000),
     ("Nova", 100_000), ("Plasma", 50_000), ("Nil", 25_000), ("Moonrock", 10_000),
     # Ocean
@@ -38,18 +41,32 @@ _TABLE: tuple[tuple[str, int], ...] = (
     # Glitch (1 in 44 map)
     ("Amalgam", 111_111_111), ("Cyberspace", 100_000_000), ("Corrupt Drive", 10_000_000),
     ("Atonion", 1_000_000), ("Noise", 100_000), ("Deformity", 55_555), ("Error", 13_370),
-    # Baseplate
+    # Baseplate (its 3rd block, the burger emoji at 10M, has no letters for _key)
     ("Thing", 100_000_000), ("TROLL", 66_666_666),
-    # Arctic (no wiki page yet; read in game)
-    ("Lucid", 250_000), ("Snowstorm", 100_000),
-    # read in game, world not known yet
-    ("Diamond", 100_000),
-    ("Arboric", 100_000_000),
+    # Arctic (no wiki pages; read in game or from the user)
+    ("Glacier", 4_000_000_000),          # user, 2026-11-07
     ("Primordial", 111_111_111),         # chat: "has collected a Primordial with a 1 / 111,111,111 chance"
-    ("Borealis", 3_500_000),             # chat, Arctic            # chat: "Inverted Arboric ... 1 / 1,000,000,000" (x10)
-    # anywhere
-    ("Rare", 200),
+    ("Destiny", 10_000_000),             # user, 2026-11-07
+    ("Borealis", 3_500_000),             # chat
+    ("Lucid", 250_000), ("Snowstorm", 100_000),
+    ("Frostbite", 45_000), ("Ice", 10_000),   # user, 2026-11-07
+    # Legacy (limited map, blocks rotate in and out)
+    ("Fate", 1_000_000_000), ("Haunt", 350_000_000), ("Cosmic", 50_000_000),
+    ("Aurora", 10_000_000), ("Guardian", 3_000_000), ("Omnipotent", 500_000),
+    ("Lunar", 100_000), ("Immortal", 50_000), ("Nebula", 25_000), ("Runic", 10_000),
+    # special
+    ("Diamond", 100_000),                # read in game
+    # any world
+    ("Zenith", 22_500_000_000), ("Euphoria", 15_000_000_000),
+    ("Controller", 10_101_101_101),
+    # the plain tiers, any world: known, but never in the activity log (TIERS)
+    ("Godly", 5_000), ("Mythical", 3_000), ("Legendary", 1_750), ("Epic", 750),
+    ("Rare", 200), ("Uncommon", 70), ("Common", 20),
 )
+
+# Everyday blocks that spawn all the time: they have numbers, but a line for each
+# would bury the real finds, so they stay out of the activity log.
+TIERS = frozenset(("godly", "mythical", "legendary", "epic", "rare", "uncommon", "common"))
 
 # Every block name on the Block Mayhem X wiki (2026-10), plus ones seen in game.
 # Only used to fix OCR typos in names ('Luc d' -> 'Lucid'), never for rarity.
@@ -58,7 +75,7 @@ NAMES: tuple[str, ...] = (
     "Azure", "Beyond", "Bubbly", "Caverna", "Common", "Convergence", "Corrupt Drive", "Cosana",
     "Cosmic", "Crystalline", "Cyberspace", "Deformity", "Desolate", "Diamond", "Doomsekkar",
     "Entropy", "Epic", "Error", "Eruption", "Ethereal", "Euphoria", "Evergreen", "Exagonios",
-    "Expanse", "Fate", "Gaia", "Galactic Rift", "Geode", "Guardian", "Haunt", "Hypergiant",
+    "Expanse", "Fate", "Gaia", "Galactic Rift", "Geode", "Glacier", "Guardian", "Haunt", "Hypergiant",
     "Ignityx", "Immortal", "Inked", "Iris", "Jellyfish", "Legendary", "Life", "Lucid",
     "Luminescent", "Lunar", "Magma", "Mercury", "Midnight", "Missing", "Moonrock", "Mosaic",
     "Mythical", "Nebula", "Nil", "Noise", "Nova", "Omnipotent", "Opal", "Overflow Crystal",
@@ -66,7 +83,7 @@ NAMES: tuple[str, ...] = (
     "Runic", "SNAKEBLOCK", "Sacrinare", "Scorched", "Singularity", "Sovereign", "Sporedelic",
     "Temporal", "Tesseract", "Thermos", "Thing", "True Andromeda", "Unbinilium", "Uncommon",
     "Vexen", "Viridian", "Voidrinyx", "Vulcan", "Whirlpool", "Zenith",
-    "Social", "TROLL",
+    "Social", "TROLL", "Controller", "Destiny", "Frostbite", "Ice", "Godly",
 )
 
 KNOWN: dict[str, int] = {re.sub(r"[^a-z0-9]", "", name.lower()): n for name, n in _TABLE}
@@ -168,6 +185,11 @@ def snap(name: str, variant: str, den: int | None) -> tuple[str, int | None]:
         if den == base * times:
             return v, den
     return variant, base
+
+
+def is_tier(name: str) -> bool:
+    """Common, Uncommon ... Godly: a plain everyday block (not 'Chromatic common')."""
+    return _key(name) in TIERS
 
 
 def rarity(name: str) -> int | None:
