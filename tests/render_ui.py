@@ -459,6 +459,17 @@ def interactions():
     assert s["anti_afk_after_min"] == 15
     app._afk_step(-1)
     assert s["anti_afk_after_min"] == 14
+    # Server hop stepper: 3 h by default, up to 12 h, down to Off
+    assert app.lbl_hop.cget("text") == "3 h"
+    for _ in range(10):
+        app._hop_step(1)
+    assert s["server_hop_hours"] == 12 and app.btn_hop_plus.cget("state") == "disabled"
+    for _ in range(10):
+        app._hop_step(-1)
+    assert s["server_hop_hours"] == 0 and app.lbl_hop.cget("text") == "Off"
+    for _ in range(3):
+        app._hop_step(1)
+    assert s["server_hop_hours"] == 3
     # World vote: tick, rank, untick
     for name in ("Void", "Lava", "Arctic"):
         app.chk_map[name].select()

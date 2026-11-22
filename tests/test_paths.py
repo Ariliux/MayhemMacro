@@ -98,6 +98,7 @@ def test_import_creates_nothing(tmp_path):
 EXPECTED_DEFAULTS = {
     "private_server_link": "",
     "auto_rejoin": True,
+    "server_hop_hours": 3,
     "anti_afk": True,
     "anti_afk_after_min": 10,
     "auto_vote": True,
@@ -165,6 +166,13 @@ def test_a_choice_saved_by_this_version_is_kept(data):
     assert json.loads((data / "settings.json").read_text())["settings_version"] == 2
     assert paths.load_settings()["check_updates"] is False
     assert paths.load_settings()["check_updates"] is False      # and stays off
+
+
+@pytest.mark.parametrize("saved, kept", [(6, 6), (0, 0), (5, 3), (-1, 3), (True, 3),
+                                         ("3", 3), (2.0, 2)])
+def test_server_hop_hours_must_be_one_of_the_choices(data, saved, kept):
+    write(paths.settings_path(), json.dumps({"server_hop_hours": saved}))
+    assert paths.load_settings()["server_hop_hours"] == kept
 
 
 def test_no_file_gives_the_defaults_and_writes_nothing(data):

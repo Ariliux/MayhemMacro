@@ -295,8 +295,35 @@ def can_self_update(info) -> bool:
 def stage_update(zip_path, stage_dir) -> str | None:
     """Unpack a downloaded update into stage_dir. The path of its
     MayhemMacro.exe, or None when the zip isn't a MayhemMacro folder build
-    (MayhemMacro.exe with _internal beside it), is broken, or tries to put
-    anything outside stage_dir."""
+    (MayhemMacro.exe with _internal beside it), is broken, can't be read, or
+    tries to put anything outside stage_dir."""
+    try:
+        return _stage(zip_path, stage_dir)
+    except OSError:
+        return None
+
+
+def stage_update_patiently(zip_path, stage_dir, tries: int = 6, wait: float = 3.0,
+                           on_wait=None, sleep=time.sleep) -> str | None:
+    """stage_update, with patience for antivirus. A fresh download can be
+    locked for a few seconds while Windows Defender checks it: GlassMacro's
+    update failed with "[Errno 22] Invalid argument" on its zip 3 s after it
+    arrived (2026-11-06), and the same update worked minutes later. So a zip
+    that can't be read gets more tries; one that is GONE (quarantined) doesn't."""
+    for attempt in range(1, tries + 1):
+        try:
+            return _stage(zip_path, stage_dir)
+        except OSError:
+            if attempt == tries or not os.path.exists(zip_path):
+                return None
+            if on_wait:
+                on_wait(attempt)
+            sleep(wait)
+    return None
+
+
+def _stage(zip_path, stage_dir) -> str | None:
+    """stage_update, except that a file that can't be read raises OSError."""
     shutil.rmtree(stage_dir, ignore_errors=True)
     os.makedirs(stage_dir, exist_ok=True)
     root = os.path.realpath(stage_dir)
@@ -310,7 +337,7 @@ def stage_update(zip_path, stage_dir) -> str | None:
                 if dest != root and not dest.startswith(root + os.sep):
                     return None
             z.extractall(root)
-    except (OSError, ValueError, RuntimeError, zipfile.BadZipFile):
+    except (ValueError, RuntimeError, zipfile.BadZipFile):
         return None
     for folder in (os.path.join(root, APP_NAME), root):
         exe = os.path.join(folder, EXE_NAME)

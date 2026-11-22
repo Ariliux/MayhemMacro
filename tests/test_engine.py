@@ -331,6 +331,7 @@ class Rig:
         self.settings["close_esc_menu"] = False   # no Esc presses unless a test asks
         self.settings["front_hourly"] = False     # no window raising unless a test asks
         self.settings["fullscreen"] = False       # no F11 unless a test asks
+        self.settings["server_hop_hours"] = 0     # no server hop unless a test asks
         self.settings.update(settings)
         self.events: list[dict] = []
         self.deps = Deps(window=self.window, ocr=self.ocr, inputs=self.inputs,
@@ -1553,6 +1554,70 @@ def test_out_of_bmx_for_60_s_rejoins(lines, why):
     r.tick()
     assert r.of("rejoin")[0]["why"] == why
     assert len(r.rejoin.launches()) == 1
+
+
+# ---- server hop: a fresh server every few hours -----------------------------
+def _hop_rig(**settings) -> Rig:
+    r = Rig(**{"private_server_link": PRIVATE, "server_hop_hours": 1, **settings}).start()
+    r.rejoin.on_kill = lambda: setattr(r.window, "hwnd", 0)    # closing Roblox closes it
+    return r
+
+
+def _kills(r: Rig) -> list[float]:
+    return [c[1] for c in r.rejoin.calls if c[0] == "kill"]
+
+
+def test_server_hop_closes_roblox_after_the_hours_and_rejoins():
+    r = _hop_rig()
+    r.run(3590)
+    assert _kills(r) == []                              # not an hour yet
+    r.run(20)
+    assert len(_kills(r)) == 1
+    assert ("1 hour in this server, so I closed Roblox to join a fresh one (server hop)."
+            in r.logs("info"))
+    r.run(25)                                           # Roblox gone 20 s: the rejoin starts
+    assert r.of("rejoin")[0]["why"] == "Server hop (1 h in the same server)"
+    assert len(r.rejoin.launches()) == 1
+    r.tail.switch(NEW_LOG.format(1))
+    r.tail.feed(JOIN(), ENTERED, LOADED)
+    r.window.hwnd = 100
+    r.tick()
+    assert r.rejoins() == [("start", 1), ("ok", 1)]
+    hopped = r.clock.t
+    r.run(3500)                                         # the clock started over at the join
+    assert len(r.rejoin.launches()) == 1 and len(_kills(r)) == 2
+    r.run(200)                                          # the next hop, an hour after the join
+    assert _kills(r)[2] - hopped >= 3600 and len(r.rejoin.launches()) == 2
+
+
+def test_server_hop_waits_while_you_use_the_pc():
+    r = _hop_rig()
+    r.run(3550)
+    for _ in range(200):                                # at the PC for ~100 s past the hour
+        r.clock.touch()
+        r.tick()
+    assert _kills(r) == []
+    r.run(59)
+    assert _kills(r) == []                              # away for under a minute
+    r.run(2)
+    assert len(_kills(r)) == 1
+
+
+def test_server_hop_waits_a_few_minutes_after_a_rare_block():
+    r = _hop_rig()
+    r.run(3500)
+    r.engine._rare_at = r.clock.t + 90                  # a rare block at 3590 s
+    r.run(300)
+    assert _kills(r) == []                              # 3800 s: only 210 s after it
+    r.run(100)
+    assert len(_kills(r)) == 1
+
+
+@pytest.mark.parametrize("settings", [{"server_hop_hours": 0}, {"auto_rejoin": False}])
+def test_no_server_hop_when_it_or_rejoin_is_off(settings):
+    r = _hop_rig(**settings)
+    r.run(3 * 3600)
+    assert r.rejoin.calls == []
 
 
 def test_back_in_the_game_by_itself_cancels_the_rejoin():

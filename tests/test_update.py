@@ -338,6 +338,30 @@ def test_a_folder_build_unpacks_and_lists_its_files(tmp_path):
                         os.path.join("_internal", "customtkinter", "theme.json"): 2}
 
 
+def test_a_zip_locked_by_antivirus_for_a_moment_is_waited_for(tmp_path, monkeypatch):
+    z = str(tmp_path / "u.zip")
+    make_zip(z, BUILD)
+    real, locked, naps, waits = update._stage, [2], [], []
+
+    def flaky(zip_path, stage_dir):
+        if locked[0]:
+            locked[0] -= 1
+            raise OSError(22, "Invalid argument", zip_path)
+        return real(zip_path, stage_dir)
+
+    monkeypatch.setattr(update, "_stage", flaky)
+    exe = update.stage_update_patiently(z, str(tmp_path / "s1"),
+                                        on_wait=waits.append, sleep=naps.append)
+    assert exe and exe.endswith("MayhemMacro.exe") and waits == [1, 2] and len(naps) == 2
+    locked[0] = 99                                         # stays locked: gives up
+    assert update.stage_update_patiently(z, str(tmp_path / "s2"), tries=3,
+                                         sleep=naps.append) is None
+    naps.clear()                                           # quarantined: no waiting
+    assert update.stage_update_patiently(str(tmp_path / "gone.zip"), str(tmp_path / "s3"),
+                                         sleep=naps.append) is None and naps == []
+    assert update.stage_update(z, str(tmp_path / "s4")) is None     # the plain one: just None
+
+
 def test_a_build_at_the_zips_top_level_works_too(tmp_path):
     z = str(tmp_path / "u.zip")
     make_zip(z, {k.split("/", 1)[1]: v for k, v in BUILD.items()})

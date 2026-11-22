@@ -30,6 +30,9 @@ something rare shows up.
 - **Rejoins your private server.** After a kick, a disconnect, a crash or Roblox closing, it
   waits until you're away from your PC, then reopens Roblox straight into your server.
   No link saved? It joins a public server instead.
+- **Server hop.** A server that has run for hours gets laggy, so every 3 hours it rejoins a
+  fresh one. Only while you're away, and never right after a rare block. Change the hours
+  or turn it off in Server → Server hop every.
 - **Rare block alerts.** It reads the spawn banner (`Resonance has spawned! (1 / 100,000)`)
   and Roblox's log, and tells you when a block at or above your rarity spawns. Inverted and
   Chromatic blocks can always alert, however common they are. Blocks you collect (from the

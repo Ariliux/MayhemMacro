@@ -3508,6 +3508,31 @@ class MayhemMacro(ctk.CTk):
             "you're away from your PC first.", first=True,
             on=s.get("auto_rejoin", True) is True,
             command=lambda: self._switch_saved("auto_rejoin", self.sw_rejoin))
+        self._hairline(card)
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=14, pady=10)
+        step = ctk.CTkFrame(row, fg_color="transparent")
+        step.pack(side="right")
+        self.btn_hop_minus = self._ghost(step, "−", lambda: self._hop_step(-1))
+        self.btn_hop_minus.configure(width=30, height=28, font=self.F(14))
+        self.btn_hop_minus.pack(side="left")
+        self.lbl_hop = ctk.CTkLabel(step, text="", text_color=TEXT,
+                                    width=64, font=self.F(13, semi=True))
+        self.lbl_hop.pack(side="left")
+        self.btn_hop_plus = self._ghost(step, "+", lambda: self._hop_step(1))
+        self.btn_hop_plus.configure(width=30, height=28, font=self.F(14))
+        self.btn_hop_plus.pack(side="left")
+        txt = ctk.CTkFrame(row, fg_color="transparent")
+        txt.pack(side="left", fill="x", expand=True)
+        ctk.CTkLabel(txt, text="Server hop every", text_color=TEXT, font=self.F(13),
+                     anchor="w", height=18).pack(fill="x")
+        hop_note = ctk.CTkLabel(txt, text="Rejoins a fresh server, so a long session "
+                                          "doesn't get laggy. Only while you're away, "
+                                          "never right after a rare block.",
+                                text_color=SUBTLE, font=self.F(11), anchor="w",
+                                justify="left", height=16, wraplength=420)
+        hop_note.pack(fill="x")
+        self._rewrap_on(txt, (hop_note,))
         self.sw_afk = self._switch_row(
             card, "Anti-AFK",
             "Jumps once before Roblox's 20-minute idle kick.",
@@ -3555,6 +3580,24 @@ class MayhemMacro(ctk.CTk):
         self._link_editing = False
         self._paint_link()
         self._paint_afk()
+        self._paint_hop()
+
+    def _paint_hop(self):
+        n = paths.hop_hours(self.settings)
+        i = paths.HOP_CHOICES.index(n)
+        self.lbl_hop.configure(text="Off" if n == 0 else f"{n} h")
+        self.btn_hop_minus.configure(state="normal" if i > 0 else "disabled")
+        self.btn_hop_plus.configure(
+            state="normal" if i < len(paths.HOP_CHOICES) - 1 else "disabled")
+
+    def _hop_step(self, step):
+        choices = paths.HOP_CHOICES
+        i = choices.index(paths.hop_hours(self.settings)) + step
+        n = choices[max(0, min(len(choices) - 1, i))]
+        if n != self.settings.get("server_hop_hours"):
+            self.settings["server_hop_hours"] = n
+            self._changed()
+        self._paint_hop()
 
     def _paint_afk(self):
         n = clamp_minutes(self.settings.get("anti_afk_after_min"))
@@ -5326,7 +5369,10 @@ class MayhemMacro(ctk.CTk):
                 raise RuntimeError("the download didn't finish or didn't match "
                                    "its fingerprint on GitHub")
             self._ui(lambda: self.set_state(title, "Unpacking…", ACCENT))
-            new_exe = update.stage_update(zip_path, update.staging_dir())
+            new_exe = update.stage_update_patiently(
+                zip_path, update.staging_dir(),
+                on_wait=lambda n: self._ui(lambda: self.set_state(
+                    title, "Waiting for Windows to check the download…", ACCENT)))
             try:
                 os.remove(zip_path)
             except OSError:

@@ -152,6 +152,7 @@ BACKOFF = (30.0, 60.0, 120.0, 300.0)
 MAX_FAILS = 5               # failed tries in a row, then the run stops
 MAX_PER_HOUR = 6            # launches per hour, so a broken server can't crash-loop
 HOUR = 3600.0
+HOP_AFTER_RARE = 300.0      # a rare block seen this recently: the server hop waits
 
 KEEP_PICTURES = 100         # vote and rare pictures kept in events\
 _PICTURE_NAME = re.compile(r"^\d{8}_\d{6}_\d{3}_[a-z0-9_-]+\.jpg$")
@@ -491,6 +492,7 @@ class Engine:
         self._step("rejoining", self._rejoin, now, st, look, disconnects)
         if not self.running:
             return
+        self._step("hopping to a fresh server", self._server_hop, now, st, look)
         self._step("bringing Roblox to the front", self._keep_front, now, st, look)
         self._step("making Roblox fullscreen", self._fullscreen, now, st, look)
         self._step("reading the screen", self._screen, now, st, look)
@@ -531,6 +533,9 @@ class Engine:
         self._setup_idle = SETUP_IDLE           # how long you must be still before it runs
         self._setups = 0
         self._joined_at = _NEVER                # the latest join line this run
+        self._server_since: float | None = None # in this server since (the server hop counts from it)
+        self._hopping = ""                      # why Roblox was closed for a server hop, until back in
+        self._rare_at = _NEVER                  # the latest rare block sighting
         self._chat_at = _NEVER
         self._chat_primed = False               # the first chat read only learns what's there
         self._chat_seq: list[str] = []          # your finds in chat order, as read so far
@@ -690,6 +695,8 @@ class Engine:
         self._send_waiting(now, st)             # the last server's held alerts go out first
         self._start_elsewhere = False
         self._joined_at = now
+        self._server_since = now                # a new server: the hop clock starts over
+        self._hopping = ""
         self._setup_done = False
         if self._setups:
             # Setup again after this join, but not while you play: the 1.5 s
@@ -825,6 +832,7 @@ class Engine:
             if prev is not None and self._same_sighting(prev, source, now):
                 return                          # the banner and the log saw the same block
         self._sighted[key] = (now, source, variant)
+        self._rare_at = now                     # the server hop waits a few minutes after this
         if len(self._sighted) > 200:
             self._prune(self._sighted, now - CHROMA_MERGE, lambda v: v[0])
 
@@ -1730,7 +1738,7 @@ class Engine:
         if self._game_frozen:
             return "Roblox froze (the game picture stopped moving, even after waking the screen)"
         if self._no_window_since is not None and now - self._no_window_since >= NO_WINDOW_AFTER:
-            return "Roblox closed"
+            return self._hopping or "Roblox closed"
         if self._not_bmx_since is not None and now - self._not_bmx_since >= NOT_BMX_AFTER:
             if self.deps.tail.place:
                 return "You're in a different game"
@@ -1789,6 +1797,34 @@ class Engine:
                                   "waiting a while before trying again.")
             return
         self._rejoin_try(now, st, rj)
+
+    def _server_hop(self, now: float, st: dict, look: _Look) -> None:
+        """Every few hours (Settings: Server hop), close Roblox so the rejoin
+        above brings you into a fresh server: a server that has run for hours
+        gets laggy. Only when nothing else is going on: you're away, no rejoin
+        or vote is under way, and no rare block showed up in the last minutes.
+        The rejoin then sees "Roblox closed" (after NO_WINDOW_AFTER, which also
+        gives the old server time to shut) and joins the saved link."""
+        if self._server_since is None:
+            self._server_since = now            # the run started in this server
+        hours = paths.hop_hours(st)
+        if not hours or not _flag(st, "auto_rejoin") or self._hopping:
+            return
+        if now - self._server_since < hours * HOUR:
+            return
+        if self._rj is not None or self._busy is not None or not (look.hwnd and look.in_bmx):
+            return
+        if now - self._rare_at < HOP_AFTER_RARE or not self._away(look) or self._capped(now):
+            return
+        try:
+            self.deps.rejoin.kill_roblox()
+        except Exception as e:
+            self._error("closing Roblox for the server hop", e)
+            self._server_since = now            # try again after another full stretch
+            return
+        self._hopping = f"Server hop ({hours} h in the same server)"
+        self._log("info", f"{hours} {'hour' if hours == 1 else 'hours'} in this server, so I "
+                          "closed Roblox to join a fresh one (server hop).")
 
     def _capped(self, now: float) -> bool:
         """MAX_PER_HOUR launches in the last hour already."""
@@ -1903,6 +1939,7 @@ class Engine:
         self._rj = None
         self._busy = None
         self._no_window_since = self._not_bmx_since = None
+        self._hopping = ""
         self._dc_noted = False
         self._wiggles, self._game_frozen, self._frame_sig = 0, False, None
         self._setup_idle = INPUT_IDLE           # our own rejoin: set up with the usual 5 s rule

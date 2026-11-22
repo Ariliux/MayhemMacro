@@ -21,6 +21,7 @@ from mayhem import safety
 DEFAULT_SETTINGS: dict = {
     "private_server_link": "",
     "auto_rejoin": True,
+    "server_hop_hours": 3,
     "anti_afk": True,
     "anti_afk_after_min": 10,
     "auto_vote": True,
@@ -70,6 +71,18 @@ SETTINGS_VERSION = 2
 # number of rolls or "all" (until stopped).
 ALSO_WORDS = {"roll_count": ("all",)}
 ROLL_COUNT_MAX = 1000
+
+# Server hop: after this many hours in one server, rejoin a fresh one (a server
+# that has run for hours gets laggy). 0 = off.
+HOP_CHOICES = (0, 1, 2, 3, 4, 6, 8, 12)
+
+
+def hop_hours(st: dict) -> int:
+    """The saved server hop hours, or the default if it isn't one of HOP_CHOICES."""
+    n = st.get("server_hop_hours")
+    if isinstance(n, int) and not isinstance(n, bool) and n in HOP_CHOICES:
+        return n
+    return DEFAULT_SETTINGS["server_hop_hours"]
 
 SAVE_TRIES = 3          # os.replace can fail for a moment while antivirus or
 RETRY_WAIT = 0.1        # a backup tool has the old file open
@@ -218,6 +231,7 @@ def _fix_lists(st: dict) -> dict:
     if n != "all" and not (isinstance(n, int) and not isinstance(n, bool)
                            and 1 <= n <= ROLL_COUNT_MAX):
         st["roll_count"] = DEFAULT_SETTINGS["roll_count"]
+    st["server_hop_hours"] = hop_hours(st)
     return st
 
 
