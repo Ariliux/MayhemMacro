@@ -74,7 +74,8 @@ something rare shows up.
 1. Go to **[Releases](../../releases/latest)** and download the `MayhemMacro-v….zip` file.
    Only get it from here, not from random re-uploads.
 2. Right-click the zip → **Extract All**. Don't run it from inside the zip.
-3. Open the folder and run **`MayhemMacro.exe`**.
+3. Open the folder and run **`MayhemMacro.exe`**. Next to it are `README.txt` (the short
+   version of this page), `LICENSE.txt` and `_internal` (the app's own files, keep it there).
 
 Windows will probably warn you the first time. That's normal, and the section
 [If Windows or your antivirus warns you](#if-windows-or-your-antivirus-warns-you)

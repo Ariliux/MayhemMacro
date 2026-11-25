@@ -435,6 +435,24 @@ def test_the_swap_puts_in_exactly_the_new_files(monkeypatch, tmp_path, staged):
     assert sorted(os.listdir(app)) == ["MayhemMacro.exe", "_internal", "my notes.txt"]
 
 
+def test_a_download_with_a_readme_beside_the_app_still_installs(monkeypatch, tmp_path):
+    """The release zip: MayhemMacro.exe, _internal, README.txt and LICENSE.txt
+    at the top (extract it and the app is right there). The readme isn't part
+    of the install, so it doesn't block the swap."""
+    lift(monkeypatch, update.GUARD_SWAP)
+    z = str(tmp_path / "u.zip")
+    make_zip(z, dict({k.split("/", 1)[1]: v for k, v in BUILD.items()},
+                     **{"README.txt": b"how to use it", "LICENSE.txt": b"MIT"}))
+    stage = str(tmp_path / "stage")
+    exe = update.stage_update(z, stage)
+    manifest = json.load(open(os.path.join(stage, "manifest.json")))
+    assert "README.txt" in manifest and "LICENSE.txt" in manifest
+    app = install(tmp_path / "app")
+    assert update.swap_in_update(os.path.dirname(exe), app, manifest) is True
+    assert state_of(app)["MayhemMacro.exe"] == b"NEW-EXE"
+    assert sorted(os.listdir(app)) == ["MayhemMacro.exe", "_internal", "my notes.txt"]
+
+
 def test_a_swap_that_fails_half_way_changes_nothing(monkeypatch, tmp_path):
     lift(monkeypatch, update.GUARD_SWAP)
     app = install(tmp_path / "app")
