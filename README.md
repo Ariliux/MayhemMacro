@@ -145,7 +145,7 @@ You pick which alerts it sends:
 - it's stuck: it couldn't rejoin after 5 tries
 - every full hour of run time (off at first)
 - a daily recap at the hour you pick (9 AM at first): run time, rare blocks, the rarest one,
-  and your luck, which is your rare blocks per hour compared with your usual
+  votes, rejoins, AFK saves, and how long the screen was off
 
 If you add your Discord user ID it can **@ you**, but only for rare blocks, errors and being
 stuck. Alerts only go out during a run you started, except the daily recap: that one goes out

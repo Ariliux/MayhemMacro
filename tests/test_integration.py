@@ -294,6 +294,7 @@ SAMPLES = {
     "collected": {"type": "collected", "block": "Sporedelic", "variant": "normal",
                   "denominator": 100000, "how": "chat"},
     "log": {"type": "log", "level": "warn", "text": "Roblox is behind other windows."},
+    "screen": {"type": "screen", "off": True},
 }
 
 
@@ -323,7 +324,7 @@ def test_every_key_the_engine_puts_in_an_event_is_one_the_app_knows():
              "vote": {"options", "chose", "ok"}, "anti_afk": {"idle", "how"},
              "rejoin": {"phase", "try", "why", "wait"}, "storage_full": {"n", "m"},
              "collected": {"block", "variant", "denominator", "how"},
-             "log": {"level", "text"}}
+             "log": {"level", "text"}, "screen": {"off"}}
     for d in _emitted_dicts(ENGINE_SRC):
         kind = d["type"]
         extra = set(d) - {"type"} - reads[kind]

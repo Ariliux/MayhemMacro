@@ -249,13 +249,11 @@ def test_the_recap_survives_a_restart_and_bad_values_are_dropped(tmp_path):
     assert stats.load_stats(path)["recap"] == stats.new_recap(5.0)
 
 
-def test_luck_compares_rares_per_hour_with_every_run_before():
+def test_the_recap_counts_time_with_the_screen_off():
     st = stats.new_stats()
-    st["total_secs"], st["rares"] = 12 * 3600, 14                # 10 h before with 10 rares
-    r = {"secs": 2 * 3600, "rares": 4}                           # 2 an hour vs 1 an hour
-    assert stats.recap_luck(st, r) == pytest.approx(2.0)
-    assert stats.recap_luck(st, {"secs": 2 * 3600, "rares": 0}) == 0.0
-    assert stats.recap_luck(st, {"secs": 1800, "rares": 4}) is None          # under an hour
-    st["total_secs"], st["rares"] = 4 * 3600, 6                  # only 2 h and 2 rares before
-    assert stats.recap_luck(st, r) is None
-    assert stats.recap_luck(st, {"secs": "x"}) is None
+    stats.recap_add_time(st, 3600, _at(2))
+    stats.recap_add_blind(st, 1800, _at(2))
+    stats.recap_add_blind(st, 0, _at(2))
+    assert st["recap"]["blind_secs"] == 1800 and st["recap"]["secs"] == 3600
+    r = stats.recap_check(st, _at(9), 9)
+    assert r["blind_secs"] == 1800 and st["recap"]["blind_secs"] == 0

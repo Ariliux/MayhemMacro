@@ -738,26 +738,11 @@ def _when(ts) -> str:
         return ""
 
 
-def luck_text(luck) -> str:
-    """'🍀 1.8x your usual' for the recap's Luck field, '' when unknown."""
-    try:
-        x = float(luck)
-    except (TypeError, ValueError):
-        return ""
-    if not x == x or x < 0:
-        return ""
-    x = float(f"{x:.1f}")              # the word goes with the number people see
-    if x >= 1.3:
-        return f"\U0001F340 Lucky: {x:.1f}× your usual"
-    if x <= 0.7:
-        return f"Unlucky: {x:.1f}× your usual"
-    return f"About usual ({x:.1f}×)"
-
-
-def recap_message(recap: dict, luck=None) -> dict:
+def recap_message(recap: dict) -> dict:
     """The daily recap: what happened since the last one. recap = a dict from
-    stats.recap_check (secs, rares, votes, rejoins, anti_afk, rarest, since,
-    until)."""
+    stats.recap_check (secs, blind_secs, rares, votes, rejoins, anti_afk,
+    rarest, since, until). Time with the screen off is said plainly: fewer
+    rares and no votes then are the screen, not bad luck."""
     r = recap if isinstance(recap, dict) else {}
 
     def n(key):
@@ -774,12 +759,16 @@ def recap_message(recap: dict, luck=None) -> dict:
         emoji = tier(top[1])[0]
         rarest = f"{emoji} {_block_name(top[0])} ({_rarity(top[1]) or 'rarity unknown'})"
     fields = [("Run time", span(r.get("secs"))), ("Rare blocks", str(n("rares"))),
-              ("Rarest", rarest)]
-    lt = luck_text(luck)
-    if lt:
-        fields.append(("Luck", lt))
-    fields += [("Votes", str(n("votes"))), ("Rejoins", str(n("rejoins"))),
-               ("AFK saves", str(n("anti_afk")))]
+              ("Rarest", rarest), ("Votes", str(n("votes"))), ("Rejoins", str(n("rejoins"))),
+              ("AFK saves", str(n("anti_afk")))]
+    try:
+        blind = float(r.get("blind_secs") or 0)
+    except (TypeError, ValueError):
+        blind = 0.0
+    if blind >= 60:
+        desc += (f"\nThe screen was off for {span(blind)}, so votes and spawn banners "
+                 f"couldn't be seen then.")
+        fields.append(("Screen off", span(blind)))
     return build_embed("recap", "\U0001F4C5 Daily recap", desc, None, fields, footer_text())
 
 

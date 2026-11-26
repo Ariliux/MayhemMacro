@@ -20,13 +20,10 @@ STATS_COUNTERS = ("runs", "errors", "rejoins", "rejoin_fails", "anti_afk",
 # stats.json so a restart in between loses nothing.
 RECAP_COUNTERS = ("rares", "votes", "rejoins", "anti_afk")
 RECAP_MIN_SECS = 60             # less run time than this isn't worth a message
-LUCK_MIN_SECS = 3600            # the recap needs an hour of run time to judge luck,
-LUCK_BASE_SECS = 3 * 3600       # and the earlier runs 3 hours
-LUCK_BASE_RARES = 3             # and at least 3 rares to compare with
 
 
 def new_recap(since: float) -> dict:
-    out = {"since": float(since), "secs": 0.0, "rarest": None}
+    out = {"since": float(since), "secs": 0.0, "blind_secs": 0.0, "rarest": None}
     out.update(dict.fromkeys(RECAP_COUNTERS, 0))
     return out
 
@@ -45,8 +42,9 @@ def _clean_recap(r) -> dict | None:
     if not isinstance(r, dict) or not _num(r.get("since")):
         return None
     out = new_recap(r["since"])
-    if _num(r.get("secs")):
-        out["secs"] = float(r["secs"])
+    for k in ("secs", "blind_secs"):
+        if _num(r.get(k)):
+            out[k] = float(r[k])
     for k in RECAP_COUNTERS:
         if _num(r.get(k)):
             out[k] = int(r[k])
@@ -188,6 +186,13 @@ def recap_add_time(st: dict, secs: float, now: float) -> None:
         r["secs"] = float(r.get("secs", 0)) + secs
 
 
+def recap_add_blind(st: dict, secs: float, now: float) -> None:
+    """Run time with the screen off (no votes or banners could be seen)."""
+    if secs > 0:
+        r = _recap(st, now - secs)
+        r["blind_secs"] = float(r.get("blind_secs", 0)) + secs
+
+
 def recap_bump(st: dict, key: str, now: float) -> None:
     """One more of a recap counter; other stats counters are ignored."""
     if key in RECAP_COUNTERS:
@@ -230,21 +235,6 @@ def recap_check(st: dict, now: float, hour: int) -> dict | None:
         return None
     st["recap"] = new_recap(now)
     return dict(r, until=float(now))
-
-
-def recap_luck(st: dict, r: dict) -> float | None:
-    """How lucky the recap was: its rare blocks per hour compared with every
-    run before it (1.0 = your usual, 2.0 = twice as many). None until there's
-    enough to compare: an hour in the recap, 3 hours and 3 rares before it."""
-    try:
-        secs, rares = float(r.get("secs", 0)), int(r.get("rares", 0))
-        base_secs = float(st.get("total_secs", 0)) - secs
-        base_rares = int(st.get("rares", 0)) - rares
-    except (TypeError, ValueError, AttributeError):
-        return None
-    if secs < LUCK_MIN_SECS or base_secs < LUCK_BASE_SECS or base_rares < LUCK_BASE_RARES:
-        return None
-    return (rares / secs) / (base_rares / base_secs)
 
 
 def reset_stats(path: str | None = None) -> tuple[dict, str]:

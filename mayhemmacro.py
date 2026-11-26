@@ -624,6 +624,7 @@ class Plan:
     error: str | None = None                       # an error line (it may end the run)
     voted: str | None = None                       # the map a vote went to
     found: dict | None = None                      # a collected block, for the session bar
+    screen: bool | None = None                     # True: the screen went off; False: back on
 
 
 STATE_LOOK = {
@@ -871,6 +872,16 @@ def plan_event(ev: dict, settings: dict, ctx: RunCtx) -> Plan:
             p.toast = ("Couldn't rejoin · the run stopped", "err")
             p.end = ("stuck", why or f"Couldn't rejoin after {tries} tries in a row.")
 
+    elif kind == "screen":
+        off = ev.get("off") is True
+        p.screen = off
+        if off:
+            p.feed.append(FeedRow("screen", "!", "AMBER", "Can't see the game: the screen is off",
+                                  "Roblox is still running · votes and banners need the screen"))
+        else:
+            p.feed.append(FeedRow("screen", "✓", "GREEN", "The screen is back on",
+                                  "watching the game again"))
+
     elif kind == "storage_full":
         n, m = _int_or_none(ev.get("n")) or 0, _int_or_none(ev.get("m")) or 0
         p.feed.append(FeedRow("storage", "■", "AMBER", "Storage is full",
@@ -954,6 +965,7 @@ class Session:
         self.hour_sent: int | None = None
         self.flushed_at = 0.0
         self.saved_at = 0.0
+        self.screen_off = False              # the engine can't see the game (monitor off)
         self.sender = None
 
     # The engine follows a storage, failed-rejoin or failed-vote event with a
@@ -994,6 +1006,7 @@ class Session:
         self.counts = dict.fromkeys(TILE_KEYS, 0)
         self.world = None
         self.rarest = None
+        self.screen_off = False
         self.end_reason, self.end_detail = "stopped", ""
         self.last_error = None
         self.hour_sent = 0
@@ -1019,6 +1032,8 @@ class Session:
                 S.recap_bump(self.stats, key, now)
         if plan.world:
             self.world = plan.world
+        if plan.screen is not None:
+            self.screen_off = plan.screen
         for found in (plan.rare, plan.found):
             den = (found or {}).get("den")
             if den and (getattr(self, "rarest", None) is None or den > self.rarest[1]):
@@ -1102,6 +1117,8 @@ class Session:
         d = min(5.0, max(0.0, now - self.flushed_at))
         S.stats_add_time(st, now - d, now)
         S.recap_add_time(st, d, now)
+        if self.screen_off:
+            S.recap_add_blind(st, d, now)
         self.flushed_at = now
         cur = st.get("current")
         if cur is not None:
@@ -1133,7 +1150,7 @@ class Session:
         cfg = _discord_cfg(settings)
         if not D.should_send(cfg, "recap"):
             return 0
-        embed = D.recap_message(recap, S.recap_luck(self.stats, recap))
+        embed = D.recap_message(recap)
         return self.dispatch([Alert("recap", embed, None, None, D.priority_for("recap"))])
 
     def _save(self) -> None:
@@ -3735,7 +3752,7 @@ class MayhemMacro(ctk.CTk):
         ("error", "Stopped by an error", True),
         ("stuck", "Stuck: couldn't rejoin after 5 tries", True),
         ("hourly", "Every full hour of run time", False),
-        ("recap", "Daily recap: run time, rares, rarest, luck", False),
+        ("recap", "Daily recap: run time, rare blocks, the rarest one", False),
     )
 
     def _build_discord(self, page):

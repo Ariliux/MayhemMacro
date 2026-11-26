@@ -1309,3 +1309,24 @@ def test_recap_settings_defaults_and_old_files(tmp_path):
     assert [paths.hour_label(h) for h in (0, 9, 12, 13, 23)] == [
         "12 AM", "9 AM", "12 PM", "1 PM", "11 PM"]
     assert [k for k, _t, _m in M.MayhemMacro.HOOK_EVENTS] == list(D.GROUPS)
+
+
+def test_screen_off_time_goes_into_the_recap_and_the_activity_feed(stats_file):
+    sess, _ = make_session(settings(), stats_file)
+    t0 = _local(1)
+    sess.begin(t0)
+    p = sess.handle({"type": "screen", "off": True}, t0)
+    assert p.feed[0].key == "screen" and "screen is off" in p.feed[0].title and p.screen is True
+    for i in range(1, 361):                                   # 30 minutes blind
+        sess.tick(t0 + i * 5)
+    p = sess.handle({"type": "screen", "off": False}, t0 + 1800)
+    assert p.feed[0].title == "The screen is back on" and p.screen is False
+    for i in range(361, 721):                                 # 30 minutes seen
+        sess.tick(t0 + i * 5)
+    sess.end(t0 + 3600)
+    assert sess.stats["recap"]["blind_secs"] == pytest.approx(1800, abs=5)
+    [sender] = FakeSender.made
+    sender.events.clear()
+    assert sess.recap_tick(_local(9)) == 1
+    f = {x["name"]: x["value"] for x in sender.events[0][0]["embed"]["fields"]}
+    assert f["Screen off"] == "30m" and f["Run time"] == "1h 00m"

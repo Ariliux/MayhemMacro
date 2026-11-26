@@ -2252,6 +2252,7 @@ def test_a_stuck_picture_while_roblox_keeps_logging_is_the_screen_not_a_freeze()
     assert eng._screen_off and not eng._game_frozen and eng._rj is None
     assert sum("Can't see the game" in t for t in r.logs("warn")) == 1
     assert not any("Roblox froze" in t for t in r.logs("warn"))
+    assert [e["off"] for e in r.of("screen")] == [True]   # the app counts the blind time
     _night(r, 6 * 3600)                                   # the whole night: still no rejoin
     assert eng._rj is None and not eng._game_frozen
     assert sum("Can't see the game" in t for t in r.logs("warn")) == 1      # said once
@@ -2260,6 +2261,7 @@ def test_a_stuck_picture_while_roblox_keeps_logging_is_the_screen_not_a_freeze()
     r.run(10)
     assert not eng._screen_off
     assert any("The screen is back on" in t for t in r.logs("info"))
+    assert [e["off"] for e in r.of("screen")] == [True, False]
 
 
 def test_a_stuck_picture_and_a_silent_log_is_still_a_freeze():

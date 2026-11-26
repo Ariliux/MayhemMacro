@@ -1415,6 +1415,7 @@ class Engine:
             if self._screen_off and old is not None and len(old) == len(sig):
                 self._screen_off = False        # (a first picture after a rejoin proves nothing)
                 self._log("info", "The screen is back on - I can see the game again.")
+                self._emit({"type": "screen", "off": False})
             return
         if self._screen_off:
             # Blind, but Roblox is fine: just wait for the screen. Only if its
@@ -1422,6 +1423,7 @@ class Engine:
             if now - self._log_alive_at >= LOG_QUIET_FOR and self._busy is None and self._rj is None:
                 self._screen_off = False
                 self._game_frozen = True
+                self._emit({"type": "screen", "off": False})
             return
         if now - self._frame_same_since < FROZEN_AFTER or now - self._nudged_at < FROZEN_NUDGE_EVERY:
             return
@@ -1438,6 +1440,7 @@ class Engine:
                                   "running, so I won't rejoin. World votes and spawn banners need "
                                   "the screen on; rare blocks from Roblox's log, anti-AFK and "
                                   "rejoining after a disconnect still work.")
+                self._emit({"type": "screen", "off": True})
                 return
             self._game_frozen = True
             return

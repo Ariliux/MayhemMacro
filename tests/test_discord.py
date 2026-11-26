@@ -770,34 +770,33 @@ def _recap(**over):
 
 
 def test_the_daily_recap_message():
-    e = D.recap_message(_recap(), 1.8)
+    e = D.recap_message(_recap())
     f = {x["name"]: x["value"] for x in e["fields"]}
     assert e["title"] == "\U0001F4C5 Daily recap" and e["color"] == D.HOOK_ACCENT
     assert e["description"] == "Since Tue 11:05 PM: 9h 12m in Block Mayhem X."
     assert f["Run time"] == "9h 12m" and f["Rare blocks"] == "14"
     assert f["Rarest"].endswith("(1 in 10,000,000)") and "destiny" in f["Rarest"].lower()
     assert f["Rarest"].startswith(D.tier(10_000_000)[0])
-    assert f["Luck"] == "\U0001F340 Lucky: 1.8\u00d7 your usual"
+    assert "Luck" not in f and "Screen off" not in f
     assert (f["Votes"], f["Rejoins"], f["AFK saves"]) == ("9", "1", "40")
     assert e["footer"]["text"] == f"MayhemMacro {APP_VER}"
     assert D.priority_for("recap") == D.PRI_MILESTONE and "recap" in D.GROUPS
 
 
-def test_a_recap_without_rares_or_luck():
+def test_a_recap_without_rares():
     e = D.recap_message(_recap(rares=0, rarest=None))
     f = {x["name"]: x["value"] for x in e["fields"]}
-    assert f["Rarest"] == "None yet" and "Luck" not in f
+    assert f["Rarest"] == "None yet" and f["Rare blocks"] == "0"
     assert D.recap_message({})["fields"][0] == {"name": "Run time", "value": "0s", "inline": True}
 
 
-@pytest.mark.parametrize("luck, text", [
-    (2.04, "\U0001F340 Lucky: 2.0\u00d7 your usual"), (1.3, "\U0001F340 Lucky: 1.3\u00d7 your usual"),
-    (1.25, "About usual (1.2\u00d7)"), (1.0, "About usual (1.0\u00d7)"),
-    (0.75, "About usual (0.8\u00d7)"), (0.7, "Unlucky: 0.7\u00d7 your usual"),
-    (0.5, "Unlucky: 0.5\u00d7 your usual"), (0.0, "Unlucky: 0.0\u00d7 your usual"),
-    (None, ""), ("x", ""), (float("nan"), ""), (-1, "")])
-def test_luck_words(luck, text):
-    assert D.luck_text(luck) == text
+def test_a_recap_says_how_long_the_screen_was_off():
+    e = D.recap_message(_recap(blind_secs=7 * 3600 + 2400))
+    f = {x["name"]: x["value"] for x in e["fields"]}
+    assert f["Screen off"] == "7h 40m"
+    assert e["description"].endswith("The screen was off for 7h 40m, so votes and spawn "
+                                     "banners couldn't be seen then.")
+    assert "Screen off" not in {x["name"] for x in D.recap_message(_recap(blind_secs=30))["fields"]}
 
 
 def test_a_recap_never_leaks_a_path_or_link():
