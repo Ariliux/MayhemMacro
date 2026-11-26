@@ -75,6 +75,11 @@ PLAY_LOG_EVERY = 10         # Activity says 'still pressing' every this many pre
 MEDAL_DELAY = 10.0          # press the clip key this long after the detection (the clip shows it)
 FROZEN_AFTER = 180.0        # the picture hasn't changed this long: the screen is off or frozen
 FROZEN_NUDGE_EVERY = 300.0  # wiggle the mouse to wake it at most this often
+# Roblox writes its log at least every couple of minutes while it plays. A stuck
+# picture with the log still going is the SCREEN (a monitor switched off for the
+# night), not Roblox: rejoining can't fix that, it only kicked the player out of
+# their server every 8 minutes all night. Stuck AND this quiet = Roblox froze.
+LOG_QUIET_FOR = 300.0
 CLIP_SAME = 600.0           # the same block isn't clipped again (spawn, then its pickup) this soon
 MEDAL_TRY = 15.0            # keep trying to press the clip key this long after it's due
 MEDAL_GAP = 20.0            # at most one clip this often
@@ -518,6 +523,9 @@ class Engine:
         self._frame_same_since = self._nudged_at = _NEVER
         self._wiggles = 0                       # wake-up wiggles in this frozen stretch
         self._game_frozen = False               # still frozen after a wiggle: Roblox froze
+        self._screen_off = False                # frozen picture, Roblox still logging: the screen is off
+        self._log_lines = -1                    # Roblox log lines read when last counted
+        self._log_alive_at = _NEVER             # when Roblox last wrote a log line
         self._clip_at: float | None = None      # when to press the Medal clip key
         self._clip_last = _NEVER
         self._play_at = _NEVER
@@ -655,7 +663,11 @@ class Engine:
         tail = self.deps.tail
         bmx = tail.in_bmx                       # per line: a join can change it mid-batch
         disconnects: list[LogEvent] = []
-        for ev in tail.poll():
+        events = tail.poll()
+        lines = getattr(tail, "lines", None)
+        if isinstance(lines, int) and lines != self._log_lines:
+            self._log_lines, self._log_alive_at = lines, now     # Roblox is still writing
+        for ev in events:
             kind = ev.kind
             if kind == "join":
                 bmx = ev.value == PLACE_ID
@@ -1400,14 +1412,33 @@ class Engine:
                 sum(abs(a - b) for a, b in zip(sig, old)) > len(sig) * 2:
             self._frame_same_since = now        # the picture moved: all good
             self._wiggles, self._game_frozen = 0, False
+            if self._screen_off and old is not None and len(old) == len(sig):
+                self._screen_off = False        # (a first picture after a rejoin proves nothing)
+                self._log("info", "The screen is back on - I can see the game again.")
+            return
+        if self._screen_off:
+            # Blind, but Roblox is fine: just wait for the screen. Only if its
+            # log goes quiet as well has Roblox itself frozen.
+            if now - self._log_alive_at >= LOG_QUIET_FOR and self._busy is None and self._rj is None:
+                self._screen_off = False
+                self._game_frozen = True
             return
         if now - self._frame_same_since < FROZEN_AFTER or now - self._nudged_at < FROZEN_NUDGE_EVERY:
             return
         if self._busy is not None or self._rj is not None or not self._input_ok(look):
             return
         if self._wiggles and not self._game_frozen:
-            # Woken up and still not moving: it's Roblox that froze (it lost
+            # Woken up and still not moving. If Roblox is still writing its log,
+            # the game is fine and it's the screen that's off: rejoining can't
+            # help. If the log went quiet too, it's Roblox that froze (it lost
             # the server, and only kicks you with 277 many minutes later).
+            if now - self._log_alive_at < LOG_QUIET_FOR:
+                self._screen_off = True
+                self._log("warn", "Can't see the game: the screen seems to be off. Roblox is still "
+                                  "running, so I won't rejoin. World votes and spawn banners need "
+                                  "the screen on; rare blocks from Roblox's log, anti-AFK and "
+                                  "rejoining after a disconnect still work.")
+                return
             self._game_frozen = True
             return
         nudge = getattr(self.deps.inputs, "nudge", None)

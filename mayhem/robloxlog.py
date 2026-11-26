@@ -194,6 +194,7 @@ class LogTail:
         self.last_idle: float | None = None   # seconds from the latest idle line (None after a join or 'left')
         self.disconnected = False             # a disconnect line since the latest join
         self.player: str | None = None        # the account playing (from 'Players.<name>.PlayerGui')
+        self.lines = 0                        # lines read so far: still growing = Roblox is alive
         self._pos = 0
         self._primed = False
         # Logs we moved on from, or that were already old at prime(). Never
@@ -263,7 +264,9 @@ class LogTail:
         self._pos += cut + 1
         name = os.path.basename(self.path)
         out: list[LogEvent] = []
-        for line in data[:cut].decode("utf-8", errors="replace").split("\n"):
+        lines = data[:cut].decode("utf-8", errors="replace").split("\n")
+        self.lines += len(lines)
+        for line in lines:
             if self.player is None and "PlayerGui" in line:
                 m = self._PLAYER.search(line)
                 if m:

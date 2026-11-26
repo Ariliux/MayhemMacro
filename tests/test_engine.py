@@ -2231,3 +2231,42 @@ def test_play_presses_slow_down_and_stay_out_of_the_activity_log():
         hud_mod.find_play = old
     assert 0 < len(presses) <= engine_mod.PLAY_FAST + 60 / engine_mod.PLAY_SLOW_EVERY + 1
     assert len([t for t in r.logs("info") if t == "Pressed Play."]) <= 1
+
+
+def _night(r, secs, logging=True):
+    """Run on with the picture stuck; Roblox writes a log line every 30 s if logging."""
+    end = r.clock.t + secs
+    while r.clock.t < end:
+        if logging:
+            r.tail.lines += 1
+        r.run(30)
+
+
+def test_a_stuck_picture_while_roblox_keeps_logging_is_the_screen_not_a_freeze():
+    """The monitor switched off for the night: the picture stops, Roblox plays on.
+    It used to rejoin every 8 minutes all night (about 50 times)."""
+    r = Rig().start()
+    r.inputs.nudge = lambda: True
+    _night(r, engine_mod.FROZEN_AFTER + engine_mod.FROZEN_NUDGE_EVERY + 60)
+    eng = r.engine
+    assert eng._screen_off and not eng._game_frozen and eng._rj is None
+    assert sum("Can't see the game" in t for t in r.logs("warn")) == 1
+    assert not any("Roblox froze" in t for t in r.logs("warn"))
+    _night(r, 6 * 3600)                                   # the whole night: still no rejoin
+    assert eng._rj is None and not eng._game_frozen
+    assert sum("Can't see the game" in t for t in r.logs("warn")) == 1      # said once
+    assert sum("stopped moving" in t for t in r.logs("warn")) == 1          # one wiggle, no more
+    r.window.frame = Image.new("RGB", (1920, 1080), (200, 180, 40))        # morning: monitor on
+    r.run(10)
+    assert not eng._screen_off
+    assert any("The screen is back on" in t for t in r.logs("info"))
+
+
+def test_a_stuck_picture_and_a_silent_log_is_still_a_freeze():
+    r = Rig().start()
+    r.inputs.nudge = lambda: True
+    _night(r, engine_mod.FROZEN_AFTER + engine_mod.FROZEN_NUDGE_EVERY + 60)
+    assert r.engine._screen_off
+    _night(r, engine_mod.LOG_QUIET_FOR + 60, logging=False)  # Roblox stopped writing too
+    assert r.engine._game_frozen or r.engine._rj is not None
+    assert any("Roblox froze" in t for t in r.logs("warn"))

@@ -105,6 +105,10 @@ newest version by hand one time.
   workers), but that one you can change on the Settings page.
 - If Roblox is in another game when you press Start, the run stops right away instead of
   touching that game. Join Block Mayhem X first.
+- **Leave the monitor on overnight.** Turn the brightness down or cover it if the light
+  bothers you. With the monitor switched off, Windows stops drawing the screen, so the world
+  vote and the spawn banners can't be seen. MayhemMacro notices that, doesn't rejoin over it,
+  and keeps doing what Roblox's log allows: rare blocks from the log, anti-AFK and rejoins.
 - **It updates itself.** When a new version is out, it asks *"v1.0.1 is available. Do you
   want to update?"* right in its window. Say **Yes** and it downloads the new version,
   closes, swaps its files and opens again by itself. Your settings and stats stay exactly
