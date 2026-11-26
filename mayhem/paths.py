@@ -53,8 +53,9 @@ DEFAULT_SETTINGS: dict = {
     "roll_count": 10,
     "discord": {"enabled": False, "webhook": "", "user_id": "",
                 "send": {"rare": True, "run": True, "rejoin": True, "storage": True,
-                         "error": True, "stuck": True, "hourly": False},
+                         "error": True, "stuck": True, "hourly": False, "recap": True},
                 "mention": {"rare": True, "error": True, "stuck": True}},
+    "recap_hour": 9,                # the daily Discord recap goes out at this hour (0-23)
     "check_updates": True,
     "ui": {"geometry": "", "page": "home", "sidebar_collapsed": False, "pin": False},
     "settings_version": 2,
@@ -83,6 +84,20 @@ def hop_hours(st: dict) -> int:
     if isinstance(n, int) and not isinstance(n, bool) and n in HOP_CHOICES:
         return n
     return DEFAULT_SETTINGS["server_hop_hours"]
+
+
+def recap_hour(st: dict) -> int:
+    """The saved daily recap hour (0-23), or the default."""
+    n = st.get("recap_hour")
+    if isinstance(n, int) and not isinstance(n, bool) and 0 <= n <= 23:
+        return n
+    return DEFAULT_SETTINGS["recap_hour"]
+
+
+def hour_label(h: int) -> str:
+    """'9 AM', '12 PM', '12 AM' for an hour 0-23."""
+    h = int(h) % 24
+    return f"{h % 12 or 12} {'AM' if h < 12 else 'PM'}"
 
 SAVE_TRIES = 3          # os.replace can fail for a moment while antivirus or
 RETRY_WAIT = 0.1        # a backup tool has the old file open
@@ -232,6 +247,7 @@ def _fix_lists(st: dict) -> dict:
                            and 1 <= n <= ROLL_COUNT_MAX):
         st["roll_count"] = DEFAULT_SETTINGS["roll_count"]
     st["server_hop_hours"] = hop_hours(st)
+    st["recap_hour"] = recap_hour(st)
     return st
 
 

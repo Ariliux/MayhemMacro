@@ -42,7 +42,7 @@ HOOK_COLOURS = {"rare": HOOK_RARE, "chromatic": HOOK_CHROMATIC,
                 "test": HOOK_ACCENT, "hourly": HOOK_GREEN,
                 "rejoined": HOOK_GREEN, "rejoin": HOOK_AMBER,
                 "rejoin_fail": HOOK_AMBER, "storage": HOOK_AMBER,
-                "stop": HOOK_MUTED, "closed": HOOK_MUTED,
+                "stop": HOOK_MUTED, "closed": HOOK_MUTED, "recap": HOOK_ACCENT,
                 "error": HOOK_RED, "stuck": HOOK_RED}
 # The webhook's picture: the app icon, from the public repo (no user data).
 AVATAR_URL = "https://raw.githubusercontent.com/Ariliux/MayhemMacro/main/docs/icon.png"
@@ -73,7 +73,7 @@ PRI_PERIODIC, PRI_MILESTONE, PRI_NORMAL = 0, 1, 2
 
 # The alert switches on the Discord page (settings["discord"]["send"]) and
 # the ones that can @mention the user (settings["discord"]["mention"]).
-GROUPS = ("rare", "run", "rejoin", "storage", "error", "stuck", "hourly")
+GROUPS = ("rare", "run", "rejoin", "storage", "error", "stuck", "hourly", "recap")
 MENTION_GROUPS = ("rare", "error", "stuck")
 
 PICTURE_NAME = "picture.png"   # fixed: a file name can never leak a path
@@ -581,7 +581,7 @@ def priority_for(group: str) -> int:
     """Which alerts give way first when the queue is full."""
     if group == "hourly":
         return PRI_PERIODIC
-    if group in ("run", "rejoin"):
+    if group in ("run", "rejoin", "recap"):
         return PRI_MILESTONE
     return PRI_NORMAL
 
@@ -728,6 +728,59 @@ def rejoin_message(phase: str, *, tries: int = 1, why="", wait=None,
         return stuck_message(why or f"Couldn't rejoin after {tries} tries in a row.",
                              run_no=run_no)
     raise ValueError(f"unknown rejoin phase: {phase}")
+
+
+def _when(ts) -> str:
+    """'Tue 9:05 AM' in local time."""
+    try:
+        return time.strftime("%a %I:%M %p", time.localtime(float(ts))).replace(" 0", " ")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return ""
+
+
+def luck_text(luck) -> str:
+    """'🍀 1.8x your usual' for the recap's Luck field, '' when unknown."""
+    try:
+        x = float(luck)
+    except (TypeError, ValueError):
+        return ""
+    if not x == x or x < 0:
+        return ""
+    x = float(f"{x:.1f}")              # the word goes with the number people see
+    if x >= 1.3:
+        return f"\U0001F340 Lucky: {x:.1f}× your usual"
+    if x <= 0.7:
+        return f"Unlucky: {x:.1f}× your usual"
+    return f"About usual ({x:.1f}×)"
+
+
+def recap_message(recap: dict, luck=None) -> dict:
+    """The daily recap: what happened since the last one. recap = a dict from
+    stats.recap_check (secs, rares, votes, rejoins, anti_afk, rarest, since,
+    until)."""
+    r = recap if isinstance(recap, dict) else {}
+
+    def n(key):
+        try:
+            return int(r.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0
+    since = _when(r.get("since"))
+    desc = (f"Since {since}: " if since else "") + \
+        f"{span(r.get('secs'))} in Block Mayhem X."
+    top = r.get("rarest")
+    rarest = "None yet"
+    if isinstance(top, (list, tuple)) and len(top) == 2:
+        emoji = tier(top[1])[0]
+        rarest = f"{emoji} {_block_name(top[0])} ({_rarity(top[1]) or 'rarity unknown'})"
+    fields = [("Run time", span(r.get("secs"))), ("Rare blocks", str(n("rares"))),
+              ("Rarest", rarest)]
+    lt = luck_text(luck)
+    if lt:
+        fields.append(("Luck", lt))
+    fields += [("Votes", str(n("votes"))), ("Rejoins", str(n("rejoins"))),
+               ("AFK saves", str(n("anti_afk")))]
+    return build_embed("recap", "\U0001F4C5 Daily recap", desc, None, fields, footer_text())
 
 
 def storage_message(n: int, m: int, *, run_no=None) -> dict:

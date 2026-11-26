@@ -177,3 +177,85 @@ def test_save_failure_returns_false(path):
     assert stats.save_stats(st, path) is False
     assert stats.save_stats("not a dict", path) is False
     assert not os.path.exists(path)
+
+
+# ------------------------------------------------------------ daily recap ---
+def _at(h, m=0, day=25):
+    """A local time on Nov <day> 2026."""
+    return time.mktime((2026, 11, day, h, m, 0, 0, 0, -1))
+
+
+def test_recap_counts_what_happened_since_the_last_one():
+    st = stats.new_stats()
+    stats.recap_add_time(st, 5, _at(1))
+    for key in ("rares", "rares", "votes", "anti_afk", "rejoins", "runs", "storage_full"):
+        stats.recap_bump(st, key, _at(1))
+    for name, den in (("Lucid", 250_000), ("Destiny", 10_000_000), ("Snowstorm", 100_000),
+                      ("", 50_000_000), ("Odd", None), ("One", 1)):
+        stats.recap_rarest(st, name, den, _at(2))
+    r = st["recap"]
+    assert (r["rares"], r["votes"], r["anti_afk"], r["rejoins"]) == (2, 1, 1, 1)
+    assert "runs" not in r and "storage_full" not in r          # only the recap's own counters
+    assert r["rarest"] == ["Destiny", 10_000_000] and r["since"] == _at(1) - 5
+
+
+def test_recap_goes_out_once_a_day_at_its_hour():
+    st = stats.new_stats()
+    stats.recap_add_time(st, 3600, _at(3))
+    assert stats.recap_check(st, _at(8, 59), 9) is None          # not yet
+    r = stats.recap_check(st, _at(9, 0), 9)
+    assert r["secs"] == 3600 and r["until"] == _at(9)
+    assert st["recap"]["secs"] == 0 and st["recap_day"] == "2026-11-25"   # the next one started
+    stats.recap_add_time(st, 600, _at(9, 30))
+    assert stats.recap_check(st, _at(9, 45), 9) is None          # once a day
+    assert stats.recap_check(st, _at(9, 5, day=26), 9)["secs"] == 600
+
+
+def test_a_missed_recap_rolls_into_the_next_one():
+    st = stats.new_stats()
+    stats.recap_add_time(st, 3600, _at(2))
+    assert stats.recap_check(st, _at(15), 9) is None             # the app was closed at 9 AM
+    assert st["recap_day"] == "2026-11-25" and st["recap"]["secs"] == 3600   # nothing lost
+    assert stats.recap_check(st, _at(16), 9) is None             # and no late recap that day
+    stats.recap_add_time(st, 1800, _at(23))
+    r = stats.recap_check(st, _at(9, 10, day=26), 9)
+    assert r["secs"] == 5400 and r["since"] == _at(2) - 3600
+
+
+def test_a_recap_with_hardly_any_run_time_isnt_made():
+    st = stats.new_stats()
+    stats.recap_add_time(st, 30, _at(8, 30))
+    assert stats.recap_check(st, _at(9), 9) is None
+    assert st["recap"]["secs"] == 30                             # kept for the next one
+
+
+def test_the_recap_survives_a_restart_and_bad_values_are_dropped(tmp_path):
+    path = str(tmp_path / "stats.json")
+    st = stats.new_stats()
+    stats.recap_add_time(st, 1200, _at(4))
+    stats.recap_bump(st, "rares", _at(4))
+    stats.recap_rarest(st, "Lucid", 250_000, _at(4))
+    st["recap_day"] = "2026-11-24"
+    assert stats.save_stats(st, path)
+    back = stats.load_stats(path)
+    assert back["recap"] == st["recap"] and back["recap_day"] == "2026-11-24"
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(dict(st, recap={"since": "x"}, recap_day="soon"), fh)
+    back = stats.load_stats(path)
+    assert back["recap"] is None and back["recap_day"] == ""
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(dict(st, recap={"since": 5.0, "secs": -3, "rares": "many",
+                                  "rarest": ["Lucid", 1]}), fh)
+    assert stats.load_stats(path)["recap"] == stats.new_recap(5.0)
+
+
+def test_luck_compares_rares_per_hour_with_every_run_before():
+    st = stats.new_stats()
+    st["total_secs"], st["rares"] = 12 * 3600, 14                # 10 h before with 10 rares
+    r = {"secs": 2 * 3600, "rares": 4}                           # 2 an hour vs 1 an hour
+    assert stats.recap_luck(st, r) == pytest.approx(2.0)
+    assert stats.recap_luck(st, {"secs": 2 * 3600, "rares": 0}) == 0.0
+    assert stats.recap_luck(st, {"secs": 1800, "rares": 4}) is None          # under an hour
+    st["total_secs"], st["rares"] = 4 * 3600, 6                  # only 2 h and 2 rares before
+    assert stats.recap_luck(st, r) is None
+    assert stats.recap_luck(st, {"secs": "x"}) is None

@@ -363,6 +363,20 @@ def page_discord():
 
 
 @state
+def page_discord_recap():
+    """The alert list scrolled into view: the daily recap row and its hour."""
+    app, data = _page("discord")
+    w = app.lbl_recap_hour
+    while w is not None and not isinstance(w, M.ctk.CTkScrollableFrame):
+        w = w.master
+    if w is not None:
+        app.update_idletasks()
+        w._parent_canvas.yview_moveto(0.55)
+        app.update()
+    return app, data
+
+
+@state
 def page_discord_saved():
     """The masked view of a saved link - in memory only, never written."""
     app, data = _page("discord")

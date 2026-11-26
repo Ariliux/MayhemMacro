@@ -1016,12 +1016,15 @@ class Session:
                     S.stats_bump(self.stats, key)
                 except KeyError:
                     pass
+                S.recap_bump(self.stats, key, now)
         if plan.world:
             self.world = plan.world
         for found in (plan.rare, plan.found):
             den = (found or {}).get("den")
             if den and (getattr(self, "rarest", None) is None or den > self.rarest[1]):
                 self.rarest = (found["name"], den)
+            if den and self.live:
+                S.recap_rarest(self.stats, found.get("name"), den, now)
         if plan.end and self.live:
             self.end_reason, self.end_detail = plan.end
         if plan.error:
@@ -1098,6 +1101,7 @@ class Session:
         st = self.stats
         d = min(5.0, max(0.0, now - self.flushed_at))
         S.stats_add_time(st, now - d, now)
+        S.recap_add_time(st, d, now)
         self.flushed_at = now
         cur = st.get("current")
         if cur is not None:
@@ -1107,6 +1111,30 @@ class Session:
         if save:
             self._save()
             self.saved_at = now
+
+    def recap_tick(self, now: float) -> int:
+        """The daily recap: at its hour, whether a run is on or not (the app
+        only has to be open). Always rolls the recap over at that hour, so
+        turning it on later never sends weeks at once; sends it only when
+        Discord alerts are on and the recap is ticked. Returns how many
+        messages were queued."""
+        settings = self.settings()
+        before = self.stats.get("recap_day")
+        try:
+            if self.live:
+                self._flush(now)             # the last few seconds count too
+            recap = S.recap_check(self.stats, now, paths.recap_hour(settings))
+        except Exception:
+            return 0
+        if self.stats.get("recap_day") != before:
+            self._save()                     # the day is handled, even with no recap
+        if recap is None:
+            return 0
+        cfg = _discord_cfg(settings)
+        if not D.should_send(cfg, "recap"):
+            return 0
+        embed = D.recap_message(recap, S.recap_luck(self.stats, recap))
+        return self.dispatch([Alert("recap", embed, None, None, D.priority_for("recap"))])
 
     def _save(self) -> None:
         try:
@@ -3707,6 +3735,7 @@ class MayhemMacro(ctk.CTk):
         ("error", "Stopped by an error", True),
         ("stuck", "Stuck: couldn't rejoin after 5 tries", True),
         ("hourly", "Every full hour of run time", False),
+        ("recap", "Daily recap: run time, rares, rarest, luck", False),
     )
 
     def _build_discord(self, page):
@@ -3818,6 +3847,8 @@ class MayhemMacro(ctk.CTk):
                               self._hook_options_changed)
             chk.pack(side="left")
             self.chk_hook[key] = chk
+            if key == "recap":
+                self._build_recap_hour(row)
             if mention:
                 m = self._check(row, "@ me", me.get(key) is True,
                                 self._hook_options_changed, small=True)
@@ -3826,16 +3857,45 @@ class MayhemMacro(ctk.CTk):
 
         self._group(sp, "WHAT AN ALERT LOOKS LIKE")
         self._build_hook_preview(sp)
-        ctk.CTkLabel(sp, text="Sent only during a run you started, at most one "
+        ctk.CTkLabel(sp, text="Sent only during a run you started (the daily recap: "
+                              "at its hour, while MayhemMacro is open), at most one "
                               "message every few seconds. No PC name or file "
                               "paths are ever sent.",
-                     text_color=MUTED, font=self.F(11), height=16
-                     ).pack(pady=(14, 8))
+                     text_color=MUTED, font=self.F(11), wraplength=560,
+                     justify="center").pack(pady=(14, 8))
+        self._paint_recap_hour()
         self._hook_reveal = False
         self._hook_test_at = 0.0
         self._hook_editing = False
         self._paint_hook()
         self._uid_changed(save=False)
+
+    def _build_recap_hour(self, row):
+        """'at 9 AM' with − and + beside the daily recap tick box (wraps
+        around midnight)."""
+        step = ctk.CTkFrame(row, fg_color="transparent")
+        step.pack(side="right")
+        self.btn_recap_minus = self._ghost(step, "−", lambda: self._recap_step(-1))
+        self.btn_recap_minus.configure(width=28, height=26, font=self.F(14))
+        self.btn_recap_minus.pack(side="left")
+        self.lbl_recap_hour = ctk.CTkLabel(step, text="", text_color=TEXT,
+                                           width=74, font=self.F(12, semi=True))
+        self.lbl_recap_hour.pack(side="left")
+        self.btn_recap_plus = self._ghost(step, "+", lambda: self._recap_step(1))
+        self.btn_recap_plus.configure(width=28, height=26, font=self.F(14))
+        self.btn_recap_plus.pack(side="left")
+
+    def _paint_recap_hour(self):
+        lbl = getattr(self, "lbl_recap_hour", None)
+        if lbl is not None:
+            lbl.configure(text="at " + paths.hour_label(paths.recap_hour(self.settings)))
+
+    def _recap_step(self, step):
+        n = (paths.recap_hour(self.settings) + step) % 24
+        if n != self.settings.get("recap_hour"):
+            self.settings["recap_hour"] = n
+            self._changed()
+        self._paint_recap_hour()
 
     def _build_hook_preview(self, sp):
         """A Discord message, drawn: who it's from, the coloured edge, the
@@ -5741,6 +5801,12 @@ class MayhemMacro(ctk.CTk):
             if self._ticks % 5 == 0:
                 try:
                     self._recheck_display()
+                except Exception:
+                    pass
+            if self._ticks % 15 == 0:            # the daily recap, run or not
+                try:
+                    if self.session.recap_tick(now):
+                        self.log("daily recap sent to Discord")
                 except Exception:
                     pass
             self._update_bar(now)

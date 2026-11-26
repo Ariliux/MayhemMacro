@@ -16,14 +16,45 @@ STATS_KEEP_DAYS = 60
 STATS_COUNTERS = ("runs", "errors", "rejoins", "rejoin_fails", "anti_afk",
                   "votes", "rares", "storage_full", "unclean_ends")
 
+# The daily recap (Discord): what happened since the last one. It lives in
+# stats.json so a restart in between loses nothing.
+RECAP_COUNTERS = ("rares", "votes", "rejoins", "anti_afk")
+RECAP_MIN_SECS = 60             # less run time than this isn't worth a message
+LUCK_MIN_SECS = 3600            # the recap needs an hour of run time to judge luck,
+LUCK_BASE_SECS = 3 * 3600       # and the earlier runs 3 hours
+LUCK_BASE_RARES = 3             # and at least 3 rares to compare with
+
+
+def new_recap(since: float) -> dict:
+    out = {"since": float(since), "secs": 0.0, "rarest": None}
+    out.update(dict.fromkeys(RECAP_COUNTERS, 0))
+    return out
+
 
 def new_stats() -> dict:
     st = {"v": 1, "total_secs": 0, "runs": 0, "longest_secs": 0,
           "longest_on": ""}
     for k in STATS_COUNTERS:
         st.setdefault(k, 0)
-    st.update({"first_run": "", "last_run": "", "days": {}, "current": None})
+    st.update({"first_run": "", "last_run": "", "days": {}, "current": None,
+               "recap": None, "recap_day": ""})
     return st
+
+
+def _clean_recap(r) -> dict | None:
+    if not isinstance(r, dict) or not _num(r.get("since")):
+        return None
+    out = new_recap(r["since"])
+    if _num(r.get("secs")):
+        out["secs"] = float(r["secs"])
+    for k in RECAP_COUNTERS:
+        if _num(r.get(k)):
+            out[k] = int(r[k])
+    top = r.get("rarest")
+    if (isinstance(top, list) and len(top) == 2 and isinstance(top[0], str)
+            and top[0].strip() and _num(top[1]) and top[1] > 1):
+        out["rarest"] = [top[0].strip()[:60], int(top[1])]
+    return out
 
 
 def _num(v) -> bool:
@@ -41,6 +72,9 @@ def _clean_stats(data: dict) -> dict:
     for k in ("longest_on", "first_run", "last_run"):
         if isinstance(data.get(k), str):
             st[k] = data[k]
+    st["recap"] = _clean_recap(data.get("recap"))
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(data.get("recap_day") or "")):
+        st["recap_day"] = data["recap_day"]
     days = data.get("days")
     if isinstance(days, dict):
         st["days"] = {d: v for d, v in days.items()
@@ -137,6 +171,80 @@ def today_secs(st: dict, now: float | None = None) -> float:
     key = time.strftime("%Y-%m-%d", time.localtime(now))
     days = st.get("days")
     return float(days.get(key, 0)) if isinstance(days, dict) else 0.0
+
+
+# ------------------------------------------------------------ daily recap ---
+def _recap(st: dict, since: float) -> dict:
+    r = st.get("recap")
+    if not isinstance(r, dict):
+        r = st["recap"] = new_recap(since)
+    return r
+
+
+def recap_add_time(st: dict, secs: float, now: float) -> None:
+    """Run time since the last recap (the app adds it with the stats time)."""
+    if secs > 0:
+        r = _recap(st, now - secs)
+        r["secs"] = float(r.get("secs", 0)) + secs
+
+
+def recap_bump(st: dict, key: str, now: float) -> None:
+    """One more of a recap counter; other stats counters are ignored."""
+    if key in RECAP_COUNTERS:
+        r = _recap(st, now)
+        r[key] = int(r.get(key, 0)) + 1
+
+
+def recap_rarest(st: dict, name, den, now: float) -> None:
+    """Keep the rarest block since the last recap."""
+    try:
+        den = int(den)
+    except (TypeError, ValueError):
+        return
+    name = str(name or "").strip()
+    if den <= 1 or not name:
+        return
+    r = _recap(st, now)
+    top = r.get("rarest")
+    if not top or den > top[1]:
+        r["rarest"] = [name[:60], den]
+
+
+def recap_check(st: dict, now: float, hour: int) -> dict | None:
+    """Once a day at `hour` (local time): the recap to send, or None.
+
+    The first check on a day at or after that hour marks the day as handled.
+    A recap is only made when that check falls within the hour itself (the
+    app was open then) and there was run time since the last recap. If the
+    app was closed at that hour, or nothing ran, nothing is sent and it all
+    rolls into the next recap. A recap that's made starts the next one."""
+    lt = time.localtime(now)
+    if lt.tm_hour < hour:
+        return None
+    today = time.strftime("%Y-%m-%d", lt)
+    if st.get("recap_day") == today:
+        return None
+    st["recap_day"] = today
+    r = st.get("recap")
+    if lt.tm_hour != hour or not isinstance(r, dict) or r.get("secs", 0) < RECAP_MIN_SECS:
+        return None
+    st["recap"] = new_recap(now)
+    return dict(r, until=float(now))
+
+
+def recap_luck(st: dict, r: dict) -> float | None:
+    """How lucky the recap was: its rare blocks per hour compared with every
+    run before it (1.0 = your usual, 2.0 = twice as many). None until there's
+    enough to compare: an hour in the recap, 3 hours and 3 rares before it."""
+    try:
+        secs, rares = float(r.get("secs", 0)), int(r.get("rares", 0))
+        base_secs = float(st.get("total_secs", 0)) - secs
+        base_rares = int(st.get("rares", 0)) - rares
+    except (TypeError, ValueError, AttributeError):
+        return None
+    if secs < LUCK_MIN_SECS or base_secs < LUCK_BASE_SECS or base_rares < LUCK_BASE_RARES:
+        return None
+    return (rares / secs) / (base_rares / base_secs)
 
 
 def reset_stats(path: str | None = None) -> tuple[dict, str]:

@@ -140,9 +140,12 @@ You pick which alerts it sends:
 - it stopped because of an error
 - it's stuck: it couldn't rejoin after 5 tries
 - every full hour of run time (off at first)
+- a daily recap at the hour you pick (9 AM at first): run time, rare blocks, the rarest one,
+  and your luck, which is your rare blocks per hour compared with your usual
 
 If you add your Discord user ID it can **@ you**, but only for rare blocks, errors and being
-stuck. Alerts only go out during a run you started.
+stuck. Alerts only go out during a run you started, except the daily recap: that one goes out
+once a day at its hour, as long as MayhemMacro is open.
 
 **Pictures:** with **Attach a picture of Roblox** on (Alerts page, **off** at first), a rare
 block alert comes with a picture of the Roblox window, so you can see what spawned. Only

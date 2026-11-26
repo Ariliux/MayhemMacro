@@ -1239,3 +1239,73 @@ def test_closing_stops_a_roll(stats_file):
     app._roll_stop = threading.Event()
     M.MayhemMacro._close(app)
     assert app._roll_stop.is_set() and app.destroyed
+
+
+# ------------------------------------------------------------ daily recap ---
+def _local(h, m=0, day=25):
+    import time as _t
+    return _t.mktime((2026, 11, day, h, m, 0, 0, 0, -1))
+
+
+def _overnight(sess):
+    """A 1-hour run from 1 AM: a 1-in-10M spawn, a vote, an AFK save."""
+    t0 = _local(1)
+    sess.begin(t0)
+    for i in range(1, 721):
+        sess.tick(t0 + i * 5)
+    sess.handle(rare(den=10_000_000, block="Destiny"), t0 + 100)
+    sess.handle({"type": "vote", "options": ["Lava"], "chose": "Lava", "ok": True}, t0 + 200)
+    sess.handle({"type": "anti_afk", "idle": 610, "how": "jump"}, t0 + 300)
+    sess.end(t0 + 3600)
+
+
+def test_the_daily_recap_goes_out_at_its_hour_after_the_run(stats_file):
+    sess, _ = make_session(settings(), stats_file)
+    _overnight(sess)
+    [sender] = FakeSender.made
+    sender.events.clear()
+    assert sess.recap_tick(_local(8, 59)) == 0 and sender.events == []
+    assert sess.recap_tick(_local(9, 0)) == 1                    # no run on: still sent
+    [(ev, pri)] = sender.events
+    f = {x["name"]: x["value"] for x in ev["embed"]["fields"]}
+    assert ev["embed"]["title"] == "\U0001F4C5 Daily recap" and ev["mention"] is None
+    assert f["Run time"] == "1h 00m" and f["Rare blocks"] == "1" and "Destiny" in f["Rarest"]
+    assert (f["Votes"], f["AFK saves"]) == ("1", "1") and pri == D.PRI_MILESTONE
+    assert saved(stats_file)["recap_day"] == "2026-11-25"
+    assert saved(stats_file)["recap"]["secs"] == 0              # the next recap starts empty
+    assert sess.recap_tick(_local(9, 30)) == 0 and len(sender.events) == 1   # once a day
+
+
+def test_the_recap_follows_its_switch_and_hour(stats_file):
+    sess, box = make_session(settings(send={"recap": False}, recap_hour=7), stats_file)
+    _overnight(sess)
+    [sender] = FakeSender.made
+    sender.events.clear()
+    assert sess.recap_tick(_local(7, 0)) == 0 and sender.events == []
+    assert sess.stats["recap"]["secs"] == 0     # still rolled over: switching it on never sends weeks
+    off = settings()
+    off["discord"]["enabled"] = False
+    sess2, _ = make_session(off, stats_file)
+    sess2.stats["recap"] = dict(sess2.stats["recap"], secs=3600.0)   # an hour to report
+    made = len(FakeSender.made)
+    assert sess2.recap_tick(_local(9, 0, day=26)) == 0 and len(FakeSender.made) == made
+    assert sess2.stats["recap"]["secs"] == 0 and sess2.stats["recap_day"] == "2026-11-26"
+
+
+def test_no_recap_file_writes_when_nothing_changes(stats_file):
+    sess, _ = make_session(settings(), stats_file)
+    assert sess.recap_tick(_local(3)) == 0 and not os.path.exists(stats_file)
+
+
+def test_recap_settings_defaults_and_old_files(tmp_path):
+    assert paths.DEFAULT_SETTINGS["discord"]["send"]["recap"] is True
+    assert paths.DEFAULT_SETTINGS["recap_hour"] == 9
+    old = tmp_path / "settings.json"
+    old.write_text(json.dumps({"settings_version": 2, "recap_hour": 25, "discord": {
+        "enabled": True, "send": {"rare": True, "hourly": True}}}), encoding="utf-8")
+    s = paths.load_settings(str(old))
+    assert s["discord"]["send"]["recap"] is True and s["discord"]["send"]["hourly"] is True
+    assert s["recap_hour"] == 9
+    assert [paths.hour_label(h) for h in (0, 9, 12, 13, 23)] == [
+        "12 AM", "9 AM", "12 PM", "1 PM", "11 PM"]
+    assert [k for k, _t, _m in M.MayhemMacro.HOOK_EVENTS] == list(D.GROUPS)
