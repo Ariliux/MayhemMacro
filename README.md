@@ -71,18 +71,18 @@ something rare shows up.
 
 ## Installing it
 
-1. Go to **[Releases](../../releases/latest)** and download the `MayhemMacro-v….zip` file.
+1. Go to **[Releases](../../releases/latest)** and download **`MayhemMacro.exe`**.
    Only get it from here, not from random re-uploads.
-2. Right-click the zip → **Extract All**. Don't run it from inside the zip.
-3. Open the folder and run **`MayhemMacro.exe`**. Next to it are `README.txt` (the short
-   version of this page), `LICENSE.txt` and `_internal` (the app's own files, keep it there).
+2. Put it wherever you like (Downloads, Desktop, a folder of your own) and double-click it.
+   That's the whole app, one file. (The `MayhemMacro-v….zip` next to it is the update
+   package the app installs itself from. It has the same app inside.)
 
 Windows will probably warn you the first time. That's normal, and the section
 [If Windows or your antivirus warns you](#if-windows-or-your-antivirus-warns-you)
 below explains what to do.
 
 Your settings, stats and log are saved in `%LOCALAPPDATA%\MayhemMacro`. If you ever want it
-gone, delete the MayhemMacro folder and that one, and that's everything.
+gone, delete `MayhemMacro.exe` and that folder, and that's everything.
 
 You only have to download it once: after that it updates itself (see
 [Using it](#using-it)). Still on 1.0.0? That one can't update itself yet, so grab the

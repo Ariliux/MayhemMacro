@@ -28,7 +28,9 @@ Installing happens only in the built app (sys.frozen), never during a run:
 The --finish-update arguments are a contract between versions (an old
 version starts a newer one with them), so they must never change.
 
-Only MayhemMacro.exe and _internal in the install folder are replaced.
+Only MayhemMacro.exe and _internal in the install folder are replaced. From
+1.1.0 on MayhemMacro is one exe: its update zip marks that (ONEFILE_MARK), and
+the swap then puts in the exe alone and retires an old _internal folder.
 settings.json, stats.json and events\\ in %LOCALAPPDATA%\\MayhemMacro are
 never opened by any of this (log.txt just gets its usual lines); the
 update's own files live in its update\\ folder and are removed afterwards.
@@ -66,6 +68,11 @@ DIGEST_RE = re.compile(r"sha256:([0-9a-fA-F]{64})")
 
 EXE_NAME = f"{APP_NAME}.exe"
 INTERNAL = "_internal"
+# MayhemMacro is ONE exe from 1.1.0 on. Its update zip still has an _internal
+# folder (older versions only install a zip with MayhemMacro.exe and _internal),
+# holding just this note: the new build is the exe alone, so the swap puts in
+# only the exe and retires the install's old _internal folder.
+ONEFILE_MARK = "onefile.txt"
 FINISH_FLAG = "--finish-update"
 MANIFEST = "manifest.json"
 UPDATED_FLAG = "updated.txt"
@@ -262,9 +269,9 @@ def finishing(argv) -> bool:
 
 def can_self_update(info) -> bool:
     """Can this copy replace itself with `info`'s release? Only the built app
-    (a MayhemMacro.exe with _internal beside it), only with a zip and its
-    fingerprint, and only in a folder it may write to. Otherwise the app just
-    says a new version is out."""
+    (MayhemMacro.exe: one file, or an older folder build with _internal),
+    only with a zip and its fingerprint, and only in a folder it may write
+    to. Otherwise the app just says a new version is out."""
     if not frozen() or not isinstance(info, dict):
         return False
     if not info.get("zip") or not info.get("sha256"):
@@ -272,8 +279,6 @@ def can_self_update(info) -> bool:
     exe = app_exe()
     here = os.path.dirname(exe)
     if os.path.basename(exe).lower() != EXE_NAME.lower():
-        return False
-    if not os.path.isdir(os.path.join(here, INTERNAL)):
         return False
     try:
         upd = os.path.normcase(os.path.realpath(update_dir()))
@@ -395,7 +400,8 @@ def _in_use(path) -> bool:
 
 def swap_in_update(src_dir, dst_dir, manifest=None, tries: int = 60,
                    wait: float = 0.5, sleep=time.sleep) -> bool:
-    """Put the new MayhemMacro.exe and _internal from src_dir into dst_dir.
+    """Put the new MayhemMacro.exe (and _internal, for a folder build) from
+    src_dir into dst_dir.
 
     The slow part, copying, goes into _internal.new and MayhemMacro.exe.new
     NEXT TO the install, which stays complete and runnable the whole time.
@@ -403,12 +409,16 @@ def swap_in_update(src_dir, dst_dir, manifest=None, tries: int = 60,
     any of them fails they're undone. True when switched; False when nothing
     changed (the old app is still running). Nothing else in dst_dir is ever
     touched: not a settings file, not a folder of the user's.
+
+    A one-file build (ONEFILE_MARK in its _internal) is the exe alone: only
+    the exe goes in, and an old _internal in dst_dir is retired with it.
     """
     safety.guard(GUARD_SWAP)
     internal = os.path.join(dst_dir, INTERNAL)
     new_int, old_int = internal + ".new", internal + ".old"
     exe = os.path.join(dst_dir, EXE_NAME)
     new_exe = exe + ".new"
+    onefile = is_onefile_build(src_dir)
 
     def drop_new():
         shutil.rmtree(new_int, ignore_errors=True)
@@ -418,13 +428,14 @@ def swap_in_update(src_dir, dst_dir, manifest=None, tries: int = 60,
         shutil.rmtree(leftover, ignore_errors=True)
     # 1. copy, and check the copy against the list made at unpacking
     try:
-        shutil.copytree(os.path.join(src_dir, INTERNAL), new_int)
+        if not onefile:
+            shutil.copytree(os.path.join(src_dir, INTERNAL), new_int)
         shutil.copy2(os.path.join(src_dir, EXE_NAME), new_exe)
         for rel, size in (manifest or {}).items():
             parts = os.path.normpath(str(rel)).split(os.sep)
             if parts == [EXE_NAME]:
                 here = new_exe
-            elif parts[0] == INTERNAL and ".." not in parts:
+            elif parts[0] == INTERNAL and ".." not in parts and not onefile:
                 here = os.path.join(new_int, *parts[1:])
             else:
                 continue                     # not part of what gets installed
@@ -451,8 +462,9 @@ def swap_in_update(src_dir, dst_dir, manifest=None, tries: int = 60,
         return False
     moved_in = False
     try:
-        os.rename(new_int, internal)
-        moved_in = True
+        if not onefile:
+            os.rename(new_int, internal)
+            moved_in = True
         os.replace(new_exe, exe)
     except Exception:
         if moved_in:
@@ -463,6 +475,12 @@ def swap_in_update(src_dir, dst_dir, manifest=None, tries: int = 60,
         raise
     shutil.rmtree(old_int, ignore_errors=True)
     return True
+
+
+def is_onefile_build(src_dir) -> bool:
+    """Is the unpacked update in src_dir a one-file MayhemMacro (the exe
+    alone; its _internal only holds ONEFILE_MARK for older versions)?"""
+    return os.path.isfile(os.path.join(src_dir, INTERNAL, ONEFILE_MARK))
 
 
 def _read_manifest(src_dir) -> dict | None:

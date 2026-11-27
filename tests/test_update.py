@@ -641,10 +641,60 @@ def test_only_the_built_app_updates_itself(monkeypatch, tmp_path, data):
     for bad in (dict(INFO, zip=None), dict(INFO, sha256=None), None):
         assert not update.can_self_update(bad)
     for exe2 in (built_app(str(tmp_path / "b"), name="python.exe"),
-                 built_app(str(tmp_path / "c"), internal=False),
                  built_app(os.path.join(update.staging_dir(), "MayhemMacro"))):
         monkeypatch.setattr(update, "app_exe", lambda e=exe2: e)
         assert not update.can_self_update(INFO), exe2
+    one = built_app(str(tmp_path / "c"), internal=False)      # 1.1.0 on: one exe
+    monkeypatch.setattr(update, "app_exe", lambda: one)
+    assert update.can_self_update(INFO)
+
+
+# ----------------------------------------------------- one exe from 1.1.0 ---
+ONEFILE_ZIP = {"MayhemMacro.exe": b"ONE-EXE",
+               "_internal/onefile.txt": b"MayhemMacro is one file now.",
+               "README.txt": b"how to use it", "LICENSE.txt": b"MIT"}
+
+
+def _stage_onefile(tmp_path):
+    z = str(tmp_path / "u.zip")
+    make_zip(z, ONEFILE_ZIP)
+    stage = str(tmp_path / "stage")
+    exe = update.stage_update(z, stage)            # what OLD versions do: it must pass
+    assert exe and update.is_onefile_build(os.path.dirname(exe))
+    return os.path.dirname(exe), json.load(open(os.path.join(stage, "manifest.json")))
+
+
+def test_a_folder_install_becomes_one_exe(monkeypatch, tmp_path):
+    lift(monkeypatch, update.GUARD_SWAP)
+    src, manifest = _stage_onefile(tmp_path)
+    app = install(tmp_path / "app")                # 1.0.9: exe + _internal
+    assert update.swap_in_update(src, app, manifest) is True
+    assert state_of(app) == {"MayhemMacro.exe": b"ONE-EXE", "my notes.txt": b"keep me"}
+    assert sorted(os.listdir(app)) == ["MayhemMacro.exe", "my notes.txt"]   # _internal retired
+
+
+def test_one_exe_updates_to_the_next_one_exe(monkeypatch, tmp_path):
+    lift(monkeypatch, update.GUARD_SWAP)
+    src, manifest = _stage_onefile(tmp_path)
+    app = tmp_path / "Downloads"
+    app.mkdir()
+    (app / "MayhemMacro.exe").write_bytes(b"OLD-ONE")
+    (app / "other download.zip").write_bytes(b"not ours")
+    assert update.swap_in_update(src, str(app), manifest) is True
+    assert sorted(os.listdir(app)) == ["MayhemMacro.exe", "other download.zip"]
+    assert (app / "MayhemMacro.exe").read_bytes() == b"ONE-EXE"
+
+
+def test_a_one_exe_swap_still_refuses_a_broken_copy(monkeypatch, tmp_path):
+    lift(monkeypatch, update.GUARD_SWAP)
+    src, manifest = _stage_onefile(tmp_path)
+    app = install(tmp_path / "app")
+    before = state_of(app)
+    lying = dict(manifest, **{"MayhemMacro.exe": 999})
+    with pytest.raises(RuntimeError):
+        update.swap_in_update(src, app, lying)
+    assert state_of(app) == before and sorted(os.listdir(app)) == [
+        "MayhemMacro.exe", "_internal", "my notes.txt"]       # nothing changed, nothing left over
 
 
 # ---------------------------------------------------- the real network ---
@@ -996,7 +1046,7 @@ def test_a_download_that_doesnt_match_changes_nothing(monkeypatch, tmp_path, dat
 
 def test_a_copy_that_cant_update_itself_offers_the_download_page(monkeypatch, tmp_path,
                                                                  threads):
-    exe = built_app(str(tmp_path / "app"), internal=False)     # not the folder build
+    exe = built_app(str(tmp_path / "app"), name="python.exe")   # not MayhemMacro.exe
     monkeypatch.setattr(update, "frozen", lambda: True)
     monkeypatch.setattr(update, "app_exe", lambda: exe)
     app = App()
