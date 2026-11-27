@@ -668,9 +668,22 @@ def test_a_folder_install_becomes_one_exe(monkeypatch, tmp_path):
     lift(monkeypatch, update.GUARD_SWAP)
     src, manifest = _stage_onefile(tmp_path)
     app = install(tmp_path / "app")                # 1.0.9: exe + _internal
+    open(os.path.join(app, "_internal", update.OWN_MARK), "wb").close()
     assert update.swap_in_update(src, app, manifest) is True
     assert state_of(app) == {"MayhemMacro.exe": b"ONE-EXE", "my notes.txt": b"keep me"}
     assert sorted(os.listdir(app)) == ["MayhemMacro.exe", "my notes.txt"]   # _internal retired
+
+
+def test_a_one_exe_leaves_another_apps_internal_alone(monkeypatch, tmp_path):
+    """MayhemMacro.exe in Downloads next to some other app's _internal (a zip
+    extracted right into Downloads): the update must not take that one."""
+    lift(monkeypatch, update.GUARD_SWAP)
+    src, manifest = _stage_onefile(tmp_path)
+    app = install(tmp_path / "Downloads", exe=b"OLD-ONE")   # _internal without our icon
+    assert update.swap_in_update(src, app, manifest) is True
+    assert state_of(app) == {"MayhemMacro.exe": b"ONE-EXE", "my notes.txt": b"keep me",
+                             os.path.join("_internal", "old.dll"): b"old"}
+    assert sorted(os.listdir(app)) == ["MayhemMacro.exe", "_internal", "my notes.txt"]
 
 
 def test_one_exe_updates_to_the_next_one_exe(monkeypatch, tmp_path):
