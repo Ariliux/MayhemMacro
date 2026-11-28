@@ -72,7 +72,7 @@ PLAY_EVERY = 1.5            # look for the title screen's PLAY button this often
 PLAY_FAST = 4               # this many quick presses, then slower: the game may still be loading
 PLAY_SLOW_EVERY = 5.0
 PLAY_LOG_EVERY = 10         # Activity says 'still pressing' every this many presses
-MEDAL_DELAY = 10.0          # press the clip key this long after the detection (the clip shows it)
+MEDAL_DELAY = 5.0           # press the clip key this long after the detection (the clip shows it)
 FROZEN_AFTER = 180.0        # the picture hasn't changed this long: the screen is off or frozen
 FROZEN_NUDGE_EVERY = 300.0  # wiggle the mouse to wake it at most this often
 # Roblox writes its log at least every couple of minutes while it plays. A stuck
