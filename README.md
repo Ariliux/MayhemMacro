@@ -4,6 +4,12 @@
 
 <h1 align="center">MayhemMacro</h1>
 
+<p align="center">
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/Ariliux/MayhemMacro?label=release&color=blue" alt="release"></a>
+  <a href="../../releases"><img src="https://img.shields.io/github/downloads/Ariliux/MayhemMacro/total?label=downloads&color=blue" alt="downloads"></a>
+  <a href="https://discord.gg/MZ5PTDCk9G"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FMZ5PTDCk9G%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&suffix=%20members&label=Discord&logo=discord&logoColor=white&color=5865F2" alt="Discord"></a>
+</p>
+
 <p align="center">An AFK macro for the Roblox game <b>Block Mayhem X</b>: anti-AFK, auto rejoin,<br>
 rare block alerts on Discord and auto world vote. Free, no exploits, just reads the screen.</p>
 
